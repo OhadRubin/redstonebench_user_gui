@@ -1,15 +1,33 @@
-# React GitHub Pages Template
+# RedstoneBench Human Calibration Interface
 
-A template for creating and deploying React applications to GitHub Pages with Tailwind CSS using one-click deployment.
+A React-based management interface for coordinating multiple Minecraft construction bots in RedstoneBench experiments. This interface allows human managers to issue commands, monitor worker status, and measure parallelization efficiency in multi-agent construction tasks.
 
 ## Features
 
-- ⚛️ React with TypeScript
-- 🎨 Tailwind CSS for styling
-- 📱 Responsive design
-- 🚀 GitHub Pages deployment
-- 🤖 One-click automated deployment
+- 🤖 **Multi-Bot Management**: Command and monitor up to 5 worker bots simultaneously
+- 🎮 **Command Center**: Issue high-level commands (gather, craft, move, build) to individual bots
+- 📊 **Real-time Monitoring**: Track bot positions, inventories, current jobs, and utilization metrics
+- 📋 **Event Logging**: Stream of bot communications (START, PROGRESS, COMPLETE, FAILED, BLOCKED)
+- 📐 **Blueprint Visualization**: ASCII-based sugar cane farm construction plans with completion tracking
+- ⏱️ **Performance Metrics**: Task timing, completion rates, and parallelization efficiency (PE) calculations
+- 🔌 **WebSocket Integration**: Real-time communication with RedstoneBench server (fallback to demo mode)
+- 🎯 **Research-Ready**: Designed for human calibration experiments in multi-agent coordination
 
+## Architecture
+
+This interface implements a **hierarchical agent architecture** where:
+- **Manager (Human)**: Issues strategic commands through the UI
+- **Worker Bots (Automated)**: Execute tactical operations in Minecraft
+- **WebSocket Server**: Coordinates communication between interface and game
+
+### Key Components
+
+- **`CommandCenter`**: Forms for issuing bot commands with parameter validation
+- **`WorkerDashboard`**: Real-time status cards for each bot showing position, inventory, and activity
+- **`EventLog`**: Chronological stream of all bot events and system messages
+- **`BlueprintViewer`**: Interactive ASCII visualization of construction plans with completion tracking
+- **`TaskProgressPanel`**: Timer, progress tracking, and parallelization efficiency metrics
+- **`useRedstoneBench`**: WebSocket client hook managing server communication and test data fallback
 
 ## Quick Start
 1. First-time setup:
