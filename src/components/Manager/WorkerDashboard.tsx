@@ -104,7 +104,6 @@ const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot }) =
       top="20px" 
       left="340px" 
       minWidth="350px"
-      maxHeight="600px"
       isMinimizable={true}
     >
       <div style={{ maxHeight: '500px', overflowY: 'auto' }}>

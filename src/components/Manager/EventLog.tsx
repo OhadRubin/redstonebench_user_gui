@@ -116,7 +116,6 @@ const EventLog: React.FC<EventLogProps> = ({ events, onClearLog }) => {
       bottom="20px" 
       right="20px" 
       minWidth="400px"
-      maxHeight="300px"
       isMinimizable={true}
     >
       <div style={headerStyle}>

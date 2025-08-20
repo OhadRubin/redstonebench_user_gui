@@ -13,8 +13,9 @@ function App() {
     events, 
     taskStats, 
     completedBlocks, 
+    connectionStatus,
     actions 
-  } = useRedstoneBench();
+  } = useRedstoneBench('ws://localhost:8080');
 
   const availableBots = bots.map(bot => bot.id);
 
@@ -86,6 +87,30 @@ function App() {
         }}>
           Multi-Agent Minecraft Construction Manager • Sugar Cane Farm Build Task
         </p>
+        <div style={{
+          fontSize: '10px',
+          marginTop: '5px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '5px'
+        }}>
+          <span style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: connectionStatus === 'connected' ? '#00ff44' : 
+                       connectionStatus === 'connecting' ? '#ffaa44' : '#ff4444'
+          }} />
+          <span style={{
+            color: connectionStatus === 'connected' ? '#00ff44' : 
+                   connectionStatus === 'connecting' ? '#ffaa44' : '#ff4444'
+          }}>
+            {connectionStatus === 'connected' ? 'Connected to RedstoneBench Server' :
+             connectionStatus === 'connecting' ? 'Connecting...' : 
+             'Disconnected (Using Test Data)'}
+          </span>
+        </div>
       </div>
 
       {/* Background Pattern */}

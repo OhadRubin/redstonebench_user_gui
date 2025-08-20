@@ -182,7 +182,6 @@ const BlueprintViewer: React.FC<BlueprintViewerProps> = ({ completedBlocks, onRe
       top="20px" 
       left="720px" 
       minWidth="300px"
-      maxHeight="500px"
       isMinimizable={true}
     >
       <div style={{ fontSize: '11px' }}>
