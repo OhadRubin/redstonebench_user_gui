@@ -1,4 +1,4 @@
-/* Dynamic Voxel Stream Visualizer Styles */
+/* RedstoneBench Human Calibration Interface Styles */
 
 * {
   box-sizing: border-box;
@@ -13,10 +13,6 @@ body {
   color: #fff;
   font-family: 'Courier New', monospace;
   overflow: hidden;
-}
-
-canvas {
-  display: block;
 }
 
 /* UI Panel Styles */
@@ -38,13 +34,6 @@ canvas {
   justify-content: space-between;
 }
 
-.voxel-counter {
-  font-size: 24px;
-  font-weight: bold;
-  text-align: center;
-  margin: 10px 0;
-  color: #00ffff;
-}
 
 .panel-header {
   display: flex;
