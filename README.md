@@ -80,6 +80,73 @@ This interface implements a **hierarchical agent architecture** where:
 
 Your app will be available at the URL provided in the console output.
 
+## Mock Server & CLI Client Architecture
+
+This project includes two additional tools for development and testing:
+
+### 🤖 Mock RedstoneBench Server (`/server/mock-redstonebench-server.js`)
+
+A complete WebSocket server that simulates the RedstoneBench backend environment:
+
+**Purpose**: Provides a realistic testing environment without requiring the actual Minecraft RedstoneBench setup.
+
+**Key Features**:
+- **Bot Simulation**: Creates 3 virtual worker bots with realistic behavior patterns
+- **WebSocket Protocol**: Implements the full RedstoneBench communication protocol
+- **Command Processing**: Handles all manager commands (gather, craft, move_to, place_blueprint, query_status)
+- **Event Streaming**: Simulates bot events with realistic delays and success/failure rates (90% success)
+- **Task Management**: Supports start/stop/reset task operations with progress tracking
+- **Admin Interface**: Built-in CLI for server administration and testing
+
+**Realistic Simulation**:
+- Commands have 2-5 second execution delays
+- Bots update inventory, position, and status based on commands
+- Random events and utilization metrics
+- Block completion simulation during active tasks
+
+### 🖥️ CLI Client (`/cli/redstonebench-cli.js`)
+
+A terminal-based interface that provides the same functionality as the web UI:
+
+**Purpose**: Allows command-line interaction with the RedstoneBench system, ideal for automation, scripting, and headless operation.
+
+**Key Features**:
+- **Interactive Shell**: Full-featured command prompt with history and help
+- **Real-time Dashboard**: Auto-refreshing bot status display
+- **Complete Command Set**: All web UI commands available via CLI
+- **WebSocket Integration**: Connects to the same server as the web interface
+- **Event Monitoring**: Real-time event stream with timestamps and emoji indicators
+
+**Usage Scenarios**:
+- **Development**: Test server functionality without web interface
+- **Automation**: Script bot commands for batch operations
+- **Monitoring**: Watch bot status in terminal environments
+- **Research**: Collect data through CLI for analysis
+
+### 🔄 How They Work Together
+
+```
+┌─────────────────┐    WebSocket     ┌─────────────────┐    Simulates     ┌─────────────────┐
+│   Web Interface │◄────────────────►│   Mock Server   │◄─────────────────►│ RedstoneBench   │
+└─────────────────┘                  └─────────────────┘                   │   Backend       │
+                                              ▲                            └─────────────────┘
+                                              │ WebSocket
+                                              ▼
+                                     ┌─────────────────┐
+                                     │   CLI Client    │
+                                     └─────────────────┘
+```
+
+**Development Workflow**:
+1. Start mock server: `npm run server`
+2. Use web interface: `npm start` → http://localhost:3000
+3. Use CLI client: `npm run cli` (in separate terminal)
+4. Both interfaces connect to the same server instance
+5. Commands from either interface appear in server logs
+6. All clients see the same bot events and status updates
+
+This setup allows complete testing of the RedstoneBench human calibration interface without requiring Minecraft or the actual backend infrastructure.
+
 ## CLI Interface
 
 The CLI provides the same functionality as the web interface but in a terminal environment:
