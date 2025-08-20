@@ -1,0 +1,20 @@
+{
+  "name": "redstonebench-mock-server",
+  "version": "1.0.0",
+  "description": "Mock WebSocket server for RedstoneBench bot simulation",
+  "main": "mock-redstonebench-server.js",
+  "bin": {
+    "redstonebench-server": "./mock-redstonebench-server.js"
+  },
+  "scripts": {
+    "start": "node mock-redstonebench-server.js",
+    "dev": "node mock-redstonebench-server.js"
+  },
+  "keywords": ["redstonebench", "minecraft", "websocket", "mock", "server"],
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

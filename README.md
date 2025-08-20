@@ -30,21 +30,105 @@ This interface implements a **hierarchical agent architecture** where:
 - **`useRedstoneBench`**: WebSocket client hook managing server communication and test data fallback
 
 ## Quick Start
-1. First-time setup:
+
+### Option 1: Web Interface + Mock Server
+
+1. **Setup tools** (first time):
+   ```bash
+   npm run setup-tools
    ```
+
+2. **Start the mock RedstoneBench server**:
+   ```bash
+   npm run server
+   ```
+
+3. **Start the web interface**:
+   ```bash
+   npm start
+   ```
+   
+   The web interface will be available at http://localhost:3000
+
+### Option 2: CLI Interface
+
+1. **Start the mock server** (in one terminal):
+   ```bash  
+   npm run server
+   ```
+
+2. **Start the CLI interface** (in another terminal):
+   ```bash
+   npm run cli
+   ```
+
+### Option 3: Deploy to GitHub Pages
+
+1. First-time setup:
+   ```bash
    npm run init-and-deploy
    ```
    You'll be prompted to enter a repository name, or you can provide one directly:
-   ```
+   ```bash
    npm run init-and-deploy -- --repo-name="dynamic-voxel-visualizer"
    ```
 
 2. For subsequent updates, simply run:
-   ```
+   ```bash
    npm run auto-deploy
    ```
 
 Your app will be available at the URL provided in the console output.
+
+## CLI Interface
+
+The CLI provides the same functionality as the web interface but in a terminal environment:
+
+```bash
+npm run cli
+```
+
+### Available Commands:
+
+- **Bot Management**: `bots`, `dashboard`, `query <bot_id>`
+- **Bot Commands**: `gather`, `craft`, `move`, `build`  
+- **Task Control**: `start-task`, `stop-task`, `reset-task`, `test-function`
+- **Information**: `status`, `events`, `watch`, `help`
+
+### Example CLI Session:
+
+```bash
+🎮 redstone> dashboard              # Show bot status
+🎮 redstone> gather 1 minecraft:oak_log 64 forest
+🎮 redstone> craft 2 minecraft:crafting_table 1  
+🎮 redstone> move 3 10 64 20
+🎮 redstone> build 1 layer_y1
+🎮 redstone> start-task            # Begin construction
+🎮 redstone> watch                 # Auto-refresh dashboard
+```
+
+## Mock Server
+
+The mock server simulates the RedstoneBench backend for testing:
+
+```bash
+npm run server
+```
+
+### Server Features:
+
+- **WebSocket API**: Compatible with the RedstoneBench protocol
+- **Bot Simulation**: 3 default bots with realistic behavior  
+- **Command Processing**: Handles all manager commands with delays
+- **Event Streaming**: Sends bot status updates and events
+- **Admin CLI**: Built-in commands for server management
+
+### Server Commands:
+
+- `status`, `bots`, `clients` - Show server state
+- `add-bot [id]`, `remove-bot [id]` - Manage bots
+- `start`, `stop` - Control task simulation
+- `simulate-event [type] [bot_id]` - Generate test events
 
 ## Development
 

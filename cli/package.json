@@ -1,0 +1,21 @@
+{
+  "name": "redstonebench-cli", 
+  "version": "1.0.0",
+  "description": "Command-line interface for RedstoneBench human calibration",
+  "main": "redstonebench-cli.js",
+  "bin": {
+    "redstonebench": "./redstonebench-cli.js"
+  },
+  "scripts": {
+    "start": "node redstonebench-cli.js",
+    "dev": "node redstonebench-cli.js"
+  },
+  "keywords": ["redstonebench", "minecraft", "cli", "websocket", "client"],
+  "dependencies": {
+    "ws": "^8.18.0",
+    "commander": "^12.1.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
