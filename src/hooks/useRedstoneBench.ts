@@ -153,87 +153,10 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     }
   }, [websocketUrl]);
 
-  // Initialize WebSocket connection and add test data
+  // Initialize WebSocket connection
   useEffect(() => {
     connectWebSocket();
 
-    // Add some test bots if no WebSocket connection after 2 seconds
-    const testDataTimeout = setTimeout(() => {
-      if (!websocket.current || websocket.current.readyState !== WebSocket.OPEN) {
-        console.log('Adding test bot data since WebSocket is not connected');
-        
-        const testBots: BotStatus[] = [
-          {
-            id: 1,
-            position: { x: 0, y: 64, z: 0 },
-            inventory: { 'minecraft:oak_log': 64, 'minecraft:stone': 32 },
-            currentJob: 'Gathering wood in forest area',
-            status: 'IN_PROGRESS',
-            lastActivity: 'Mining oak logs',
-            utilization: 85.2
-          },
-          {
-            id: 2,
-            position: { x: 15, y: 63, z: 12 },
-            inventory: { 'minecraft:cobblestone': 45, 'minecraft:iron_ore': 8 },
-            currentJob: 'Mining stone for foundation',
-            status: 'IN_PROGRESS',
-            lastActivity: 'Breaking cobblestone',
-            utilization: 72.8
-          },
-          {
-            id: 3,
-            position: { x: -8, y: 64, z: 5 },
-            inventory: {},
-            currentJob: 'Idle - awaiting commands',
-            status: 'IDLE',
-            lastActivity: 'Completed chest deposit',
-            utilization: 23.1
-          }
-        ];
-
-        const testEvents: BotEvent[] = [
-          {
-            id: '1',
-            timestamp: Date.now() - 30000,
-            botId: 1,
-            type: 'START',
-            jobId: 'gather_001',
-            message: 'Started gathering oak_log (quantity: 64) in forest area'
-          },
-          {
-            id: '2',
-            timestamp: Date.now() - 25000,
-            botId: 2,
-            type: 'START',
-            jobId: 'gather_002',
-            message: 'Started gathering stone (quantity: 50)'
-          },
-          {
-            id: '3',
-            timestamp: Date.now() - 15000,
-            botId: 3,
-            type: 'COMPLETE',
-            jobId: 'chest_001',
-            message: 'Successfully deposited items in chest at (0,65,0)'
-          }
-        ];
-
-        setState(prev => ({
-          ...prev,
-          bots: testBots,
-          events: testEvents,
-          taskStats: {
-            ...prev.taskStats,
-            startTime: Date.now() - 180000,
-            isRunning: true,
-            completedBlocks: 23,
-            workerCount: testBots.length
-          },
-          completedBlocks: new Set(['0,1,0', '1,1,0', '2,1,0', '0,1,1', '1,1,1'])
-        }));
-      }
-    }, 2000);
 
     return () => {
       if (websocket.current) {
@@ -242,7 +165,6 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       if (reconnectTimeout.current) {
         clearTimeout(reconnectTimeout.current);
       }
-      clearTimeout(testDataTimeout);
     };
   }, [connectWebSocket]);
 
