@@ -116,13 +116,17 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
       padding: '16px',
       borderTop: '2px solid #00ffff',
       display: 'flex',
-      gap: '16px',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
       height: '300px',
       flexShrink: 0, // Critical: prevents bottom panel from shrinking
       minHeight: '300px' // Ensures minimum height is maintained
     }}>
-      {/* Left - Worker Dashboard (Unit Info equivalent) */}
-      <div style={{ width: '320px' }}>
+      {/* Left - Worker Dashboard (Left Aligned) */}
+      <div style={{ 
+        width: '320px',
+        flexShrink: 0
+      }}>
         <WorkerDashboard
           bots={bots}
           onQueryBot={actions.queryBot}
@@ -130,16 +134,27 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
         />
       </div>
 
-      {/* Center - Command Center */}
-      <div style={{ flex: 1, maxWidth: '400px' }}>
+      {/* Center - Command Center (Center Aligned) */}
+      <div style={{ 
+        width: '400px',
+        flexShrink: 0,
+        display: 'flex',
+        justifyContent: 'center'
+      }}>
         <CommandCenter
           availableBots={availableBots}
           onCommandSent={actions.sendCommand}
         />
       </div>
 
-      {/* Right - Minimap (replacing Event Log) */}
-      <div style={{ width: '220px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {/* Right - Minimap (Right Aligned) */}
+      <div style={{ 
+        width: '320px', 
+        flexShrink: 0,
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: '12px' 
+      }}>
         <Minimap
           bots={bots}
           selectedBot={selectedBot}
