@@ -36,29 +36,48 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propViewport?.x, propViewport?.y, propViewport?.zoom]);
 
-  // Notify parent of viewport changes with canvas dimensions (only when changed)
+  // Notify parent of viewport changes with canvas dimensions (throttled + deduped)
   const lastSentRef = useRef<{x:number;y:number;zoom:number;width:number;height:number}|null>(null);
+  const rafIdRef = useRef<number | null>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !onViewportChange) return;
+
+    // Quantize values to avoid subpixel churn
     const payload = {
-      x: viewport.x,
-      y: viewport.y,
-      zoom: viewport.zoom,
+      x: Math.round(viewport.x * 100) / 100, // 0.01 precision
+      y: Math.round(viewport.y * 100) / 100,
+      zoom: Math.round(viewport.zoom * 10000) / 10000, // 4 dp for zoom
       width: canvas.width,
       height: canvas.height
     };
-    const last = lastSentRef.current;
-    const changed = !last ||
-      Math.abs(last.x - payload.x) > 1e-6 ||
-      Math.abs(last.y - payload.y) > 1e-6 ||
-      Math.abs(last.zoom - payload.zoom) > 1e-6 ||
-      last.width !== payload.width ||
-      last.height !== payload.height;
-    if (changed) {
-      lastSentRef.current = payload;
-      onViewportChange(payload);
+
+    const sendIfChanged = () => {
+      const last = lastSentRef.current;
+      const changed = !last ||
+        last.x !== payload.x ||
+        last.y !== payload.y ||
+        last.zoom !== payload.zoom ||
+        last.width !== payload.width ||
+        last.height !== payload.height;
+      if (changed) {
+        lastSentRef.current = payload;
+        onViewportChange(payload);
+      }
+      rafIdRef.current = null;
+    };
+
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
     }
+    rafIdRef.current = requestAnimationFrame(sendIfChanged);
+
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
   }, [viewport, onViewportChange]);
 
   // Separate useEffect for canvas sizing to prevent resize loops
