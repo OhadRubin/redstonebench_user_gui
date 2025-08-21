@@ -5,13 +5,15 @@ A React-based management interface for coordinating multiple Minecraft construct
 ## Features
 
 - 🤖 **Multi-Bot Management**: Command and monitor up to 5 worker bots simultaneously
+- 🗺️ **Visual Battlefield Map**: Interactive canvas displaying real-time bot positions with click-to-select functionality
 - 🎮 **Command Center**: Issue high-level commands (gather, craft, move, build) to individual bots
 - 📊 **Real-time Monitoring**: Track bot positions, inventories, current jobs, and utilization metrics
 - 📋 **Event Logging**: Stream of bot communications (START, PROGRESS, COMPLETE, FAILED, BLOCKED)
-- 📐 **Blueprint Visualization**: ASCII-based sugar cane farm construction plans with completion tracking
-- ⏱️ **Performance Metrics**: Task timing, completion rates, and parallelization efficiency (PE) calculations
+- 📐 **Blueprint Visualization**: Modal-based sugar cane farm construction plans with completion tracking
+- ⏱️ **Performance Metrics**: Task timing, completion rates, and parallelization efficiency displayed in top bar
 - 🔌 **WebSocket Integration**: Real-time communication with RedstoneBench server (fallback to demo mode)
 - 🎯 **Research-Ready**: Designed for human calibration experiments in multi-agent coordination
+- 🎨 **Modern UI Layout**: Three-panel layout with top status bar, central battlefield map, and bottom control panels
 
 ## Architecture
 
@@ -22,12 +24,41 @@ This interface implements a **hierarchical agent architecture** where:
 
 ### Key Components
 
-- **`CommandCenter`**: Forms for issuing bot commands with parameter validation
-- **`WorkerDashboard`**: Real-time status cards for each bot showing position, inventory, and activity
-- **`EventLog`**: Chronological stream of all bot events and system messages
-- **`BlueprintViewer`**: Interactive ASCII visualization of construction plans with completion tracking
-- **`TaskProgressPanel`**: Timer, progress tracking, and parallelization efficiency metrics
+- **`App`**: Main application with three-tier layout: TopBar (metrics), central BotCanvas (battlefield), and BottomPanel (controls)
+- **`BotCanvas`**: Interactive battlefield map displaying real-time bot positions with visual status indicators and click-to-select functionality
+- **`TopBar`**: Status bar showing elapsed time, task progress, bot count, and connection status with real-time updates
+- **`BottomPanel`**: Horizontal control panel housing WorkerDashboard, CommandCenter, and EventLog
+- **`CommandCenter`**: Forms for issuing bot commands with parameter validation (now panel-free design)
+- **`WorkerDashboard`**: Real-time status cards for each bot showing position, inventory, and activity (now panel-free design)
+- **`EventLog`**: Chronological stream of all bot events and system messages (now panel-free design)
+- **`BlueprintViewer`**: Modal-based visualization of construction plans with completion tracking
+- **`TaskProgressPanel`**: Overlay widget with timer, progress tracking, and task control buttons
 - **`useRedstoneBench`**: WebSocket client hook managing server communication and test data fallback
+
+## Visual Battlefield Map
+
+The new **BotCanvas** component provides a real-time, interactive visual representation of the construction site:
+
+### Features
+- **Real-time Positioning**: Bots are displayed as colored circles on a grid-based canvas that updates in real-time
+- **Status Indicators**: Bot colors reflect their current status:
+  - 🔵 **Blue**: Active/working bots
+  - 🟢 **Green**: Completed tasks
+  - 🟡 **Yellow**: Blocked/waiting bots
+  - 🔴 **Red**: Failed/error state
+- **Interactive Selection**: Click any bot to select it and view detailed information in the worker dashboard
+- **Visual Feedback**: Selected bots display a golden selection ring
+- **Coordinate System**: World coordinates are mapped to canvas space with grid overlay for spatial reference
+- **Legend**: Color-coded legend explains bot status meanings
+- **Scalable View**: Automatically scales to fit bots within the battlefield boundaries
+
+### UI Layout
+The interface now uses a modern three-tier layout:
+- **Top Bar**: Real-time metrics (elapsed time, progress, bot count, connection status)
+- **Central Canvas**: Large battlefield map showing bot positions and activities
+- **Bottom Panel**: Three control sections side-by-side (Worker Dashboard, Command Center, Event Log)
+
+This design provides better spatial awareness and makes it easier to coordinate multiple bots across large construction areas.
 
 ## Quick Start
 

@@ -173,21 +173,7 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect })
         overflow: 'hidden'
       }}
     >
-      {/* Header overlay */}
-      <div style={{
-        position: 'absolute',
-        top: '12px',
-        left: '12px',
-        background: 'rgba(0, 0, 0, 0.7)',
-        color: '#00ffff',
-        padding: '8px 12px',
-        borderRadius: '6px',
-        fontSize: '14px',
-        fontWeight: 'bold',
-        zIndex: 10
-      }}>
-        🗺️ Battlefield Map
-      </div>
+
 
       {/* Bot count indicator */}
       <div style={{
