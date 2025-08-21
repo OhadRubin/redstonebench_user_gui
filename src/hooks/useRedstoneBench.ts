@@ -46,6 +46,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
   const eventIdCounter = useRef(Date.now());
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const statusPollInterval = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttempts = useRef<number>(0);
 
   const connectWebSocket = useCallback(() => {
     if (websocket.current?.readyState === WebSocket.OPEN) {
@@ -59,8 +60,11 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       websocket.current = ws;
 
       ws.onopen = () => {
-        console.log('Connected to RedstoneBench server');
+        console.log('✅ Connected to RedstoneBench server');
         setState(prev => ({ ...prev, connectionStatus: 'connected' }));
+        
+        // Reset reconnect attempts on successful connection
+        reconnectAttempts.current = 0;
         
         if (reconnectTimeout.current) {
           clearTimeout(reconnectTimeout.current);
@@ -171,7 +175,6 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       };
 
       ws.onclose = () => {
-        console.log('Disconnected from RedstoneBench server');
         setState(prev => ({ ...prev, connectionStatus: 'disconnected' }));
         
         // Stop status polling when disconnected
@@ -180,19 +183,41 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
           statusPollInterval.current = null;
         }
         
-        // Auto-reconnect after 2 seconds
+        reconnectAttempts.current++;
+        
+        // Log with exponential frequency: 1, 2, 4, 8, 16, 32, 64, 128...
+        if (reconnectAttempts.current === 1) {
+          console.log('❌ Disconnected from RedstoneBench server - attempting to reconnect...');
+        } else {
+          // Check if attempt count is a power of 2 (1, 2, 4, 8, 16, 32...)
+          const isPowerOfTwo = (reconnectAttempts.current & (reconnectAttempts.current - 1)) === 0;
+          if (isPowerOfTwo) {
+            console.log(`⚠️ Still trying to reconnect (${reconnectAttempts.current} attempts)...`);
+          }
+        }
+        
+        // Keep original 2-second reconnect (fast reconnection is desired)
         reconnectTimeout.current = setTimeout(() => {
           connectWebSocket();
         }, 2000);
       };
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      ws.onerror = () => {
+        // Silently handle WebSocket errors to reduce console spam
         setState(prev => ({ ...prev, connectionStatus: 'disconnected' }));
       };
 
     } catch (error) {
-      console.error('Failed to create WebSocket:', error);
+      setState(prev => ({ ...prev, connectionStatus: 'disconnected' }));
+      
+      reconnectAttempts.current++;
+      
+      // Only log on first attempt to avoid spam
+      if (reconnectAttempts.current === 1) {
+        console.error('Failed to create WebSocket:', error);
+      }
+      
+      // Keep original 2-second reconnect
       reconnectTimeout.current = setTimeout(() => {
         connectWebSocket();
       }, 2000);

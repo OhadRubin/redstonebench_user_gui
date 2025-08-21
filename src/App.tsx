@@ -149,14 +149,14 @@ function App() {
 
   const availableBots = bots.map(bot => bot.id);
 
-  // Debug logs
-  console.log('App.tsx - Debug Info:', {
-    connectionStatus,
-    botsCount: bots.length,
-    bots: bots,
-    selectedBot,
-    taskStats
-  });
+  // Debug logs (commented out to reduce console spam)
+  // console.log('App.tsx - Debug Info:', {
+  //   connectionStatus,
+  //   botsCount: bots.length,
+  //   bots: bots,
+  //   selectedBot,
+  //   taskStats
+  // });
 
   return (
     <div style={{
