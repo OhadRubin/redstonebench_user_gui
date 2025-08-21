@@ -116,7 +116,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
             if (data.workers_available && Array.isArray(data.workers_available)) {
               const newBots: BotStatus[] = data.workers_available.map((botId: string) => ({
                 id: botId, // Keep as string (e.g., "worker_0")
-                position: { x: 0, y: 64, z: 0 },
+                position: { x: 0, y: 0, z: 64 }, // x=x, y=z (for 2D view), z=y
                 inventory: {},
                 currentJob: 'Querying status...',
                 status: 'IDLE' as const,
@@ -187,7 +187,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
           } else if (data.type === 'worker_list') {
             const newBots: BotStatus[] = data.workers.map((worker: any) => ({
               id: worker.id,
-              position: worker.position || { x: 0, y: 64, z: 0 },
+              position: worker.position || { x: 0, y: 0, z: 64 }, // x=x, y=z (for 2D view), z=y
               inventory: worker.inventory || {},
               currentJob: worker.current_job || 'Idle',
               status: worker.status || 'IDLE',
@@ -214,9 +214,17 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
               bots: prev.bots.map(bot => {
                 const serverWorker = workers.find((w: any) => w.id === bot.id);
                 if (serverWorker) {
+                  // Convert position array [x, y, z] to object {x, y} (using x and z for 2D view)
+                  let position = bot.position;
+                  if (serverWorker.position && Array.isArray(serverWorker.position) && serverWorker.position.length >= 3) {
+                    position = { x: serverWorker.position[0], y: serverWorker.position[2], z: serverWorker.position[1] };
+                  } else if (serverWorker.position && typeof serverWorker.position === 'object') {
+                    position = serverWorker.position;
+                  }
+
                   return {
                     ...bot,
-                    position: serverWorker.position || bot.position,
+                    position,
                     inventory: serverWorker.inventory || bot.inventory,
                     currentJob: serverWorker.current_job || (serverWorker.status === 'IDLE' ? 'Idle - awaiting commands' : 'Working'),
                     status: serverWorker.status === 'BUSY' ? 'IN_PROGRESS' : 'IDLE',

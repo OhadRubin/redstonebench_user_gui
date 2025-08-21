@@ -180,7 +180,8 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
       for (let y = offsetY - terrainSize; y <= worldMaxY + terrainSize; y += terrainSize) {
         // Vary terrain types based on position
         const hash = Math.abs(Math.sin(x * 0.01) * Math.cos(y * 0.01) * 1000);
-        const terrainType = Math.floor(hash % 3);
+        // const terrainType = Math.floor(hash % 3);
+        const terrainType = 0;
         
         if (terrainType === 0) {
           // Grass terrain
@@ -227,7 +228,7 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     // Draw bots as units in the world
     bots.forEach((bot) => {
       const worldX = bot.position.x * 5; // Scale up for better visibility
-      const worldZ = bot.position.z * 5;
+      const worldZ = bot.position.y * 5; // Using y coordinate (which contains the original z) for 2D view
 
       // Bot body
       const isSelected = selectedBot?.id === bot.id;
@@ -314,7 +315,7 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
       let clickedBot = null;
       for (const bot of bots) {
         const worldX = bot.position.x * 5;
-        const worldZ = bot.position.z * 5;
+        const worldZ = bot.position.y * 5; // Using y coordinate (which contains the original z) for 2D view
         const distance = Math.sqrt(
           Math.pow(worldPos.x - worldX, 2) + Math.pow(worldPos.y - worldZ, 2)
         );
