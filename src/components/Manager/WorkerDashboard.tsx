@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface BotStatus {
-  id: number;
+  id: string; // Changed to string to match server format (e.g., "worker_0")
   position: { x: number; y: number; z: number };
   inventory: { [item: string]: number };
   currentJob: string;
@@ -12,7 +12,7 @@ export interface BotStatus {
 
 interface WorkerDashboardProps {
   bots: BotStatus[];
-  onQueryBot: (botId: number) => void;
+  onQueryBot: (botId: string) => void;
   selectedBot: BotStatus | null;
 }
 

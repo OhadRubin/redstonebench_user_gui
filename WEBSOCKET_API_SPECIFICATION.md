@@ -2,6 +2,8 @@
 
 This document specifies the WebSocket communication protocol between the RedstoneBench GUI and the server.
 
+**Note**: This specification has been updated to align with the server implementation.
+
 ## Connection Details
 
 - **Default URL**: `ws://localhost:8080`
@@ -13,116 +15,88 @@ This document specifies the WebSocket communication protocol between the Redston
 The GUI communicates with the server through the following message categories:
 
 1. **Client → Server (Outgoing Messages)**
-   - Manager Commands
+   - Direct Bot Commands
    - Task Control Messages
+   - Status Queries
 
 2. **Server → Client (Incoming Messages)**
-   - Bot Status Updates
-   - Bot Events
-   - Worker List Updates
-   - Block Completion Events
-   - Task Statistics Updates
+   - Connection Confirmation
+   - Status Responses
+   - Worker Events
+   - Task Event Messages
 
 ---
 
 ## 1. Client → Server Messages
 
-### 1.1 Manager Commands
+### 1.1 Direct Bot Commands
 
-All bot commands are sent with this structure:
+Bot commands are sent directly without wrapper, using the command type as the message type:
 
+**General Structure:**
 ```json
 {
-  "type": "manager_command",
-  "command": "gather|craft|move_to|place_blueprint|use_chest|query_status|wait",
-  "bot_id": 1,
-  "parameters": { /* command-specific parameters */ },
-  "timestamp": 1234567890123
+  "type": "command_type",
+  "bot_id": "worker_0",
+  "job_id": "gui_job_1234567890",
+  /* command-specific parameters */
 }
 ```
 
 #### Available Commands:
 
-**1.1.1 Gather Resources**
+**1.1.1 Move to Position**
 ```json
 {
-  "type": "manager_command",
-  "command": "gather",
-  "bot_id": 1,
-  "resource": "minecraft:oak_log",
-  "quantity": 10,
-  "region": "forest_area", // optional
-  "timestamp": 1234567890123
+  "type": "move_to",
+  "bot_id": "worker_0",
+  "job_id": "gui_job_1234567890",
+  "target": {
+    "x": 100,
+    "y": 64, 
+    "z": 200
+  }
 }
 ```
 
-**1.1.2 Craft Items**
+**1.1.2 Gather Resources**
 ```json
 {
-  "type": "manager_command",
-  "command": "craft",
-  "bot_id": 1,
-  "item": "minecraft:crafting_table",
-  "quantity": 1,
-  "timestamp": 1234567890123
+  "type": "gather",
+  "bot_id": "worker_0",
+  "job_id": "gui_job_1234567890",
+  "resource": "oak_log",
+  "quantity": 5,
+  "area": {
+    "x1": 95, "z1": 195,
+    "x2": 105, "z2": 205
+  }
 }
 ```
 
-**1.1.3 Move to Position**
+**1.1.3 Craft Items**
 ```json
 {
-  "type": "manager_command",
-  "command": "move_to",
-  "bot_id": 1,
-  "x": 10,
-  "y": 64,
-  "z": 20,
-  "timestamp": 1234567890123
+  "type": "craft",
+  "bot_id": "worker_0",
+  "job_id": "gui_job_1234567890", 
+  "item": "oak_planks",
+  "quantity": 4
 }
 ```
 
-**1.1.4 Place Blueprint**
+**1.1.4 Place Block**
 ```json
 {
-  "type": "manager_command",
-  "command": "place_blueprint",
-  "bot_id": 1,
-  "region": "layer_y1", // layer_y0|layer_y1|layer_y2|all_layers|custom
-  "timestamp": 1234567890123
-}
-```
-
-**1.1.5 Use Chest**
-```json
-{
-  "type": "manager_command",
-  "command": "use_chest",
-  "bot_id": 1,
-  "action": "deposit", // deposit|withdraw
-  "items": "minecraft:oak_log:10",
-  "chest_pos": "0,65,0",
-  "timestamp": 1234567890123
-}
-```
-
-**1.1.6 Query Status**
-```json
-{
-  "type": "manager_command",
-  "command": "query_status",
-  "bot_id": 1,
-  "timestamp": 1234567890123
-}
-```
-
-**1.1.7 Wait**
-```json
-{
-  "type": "manager_command",
-  "command": "wait",
-  "bot_id": 1,
-  "duration": 5, // seconds
-  "timestamp": 1234567890123
+  "type": "place_block",
+  "bot_id": "worker_0",
+  "job_id": "gui_job_1234567890",
+  "block_type": "stone",
+  "coordinates": {
+    "x": 100,
+    "y": 64,
+    "z": 200
+  }
 }
 ```
 
@@ -155,8 +129,24 @@ All bot commands are sent with this structure:
 **1.2.4 Run Functional Test**
 ```json
 {
-  "type": "run_functional_test",
-  "timestamp": 1234567890123
+  "type": "run_functional_test"
+}
+```
+
+### 1.3 Status Queries
+
+**1.3.1 Get Status (All Workers)**
+```json
+{
+  "type": "get_status"
+}
+```
+
+**1.3.2 Query Status (Detailed)**
+```json
+{
+  "type": "query_status",
+  "detailed": true
 }
 ```
 
@@ -166,43 +156,47 @@ All bot commands are sent with this structure:
 
 ### 2.1 Connection Established
 
-Sent immediately when client connects, contains bot IDs only:
+Sent immediately when client connects:
 
 ```json
 {
-  "type": "connection_established",
-  "client_id": "client_1755758515261_ieap104hh",
-  "workers_available": [0, 1], // Array of bot IDs only
+  "type": "connection_established", 
+  "client_id": "client_1703123456789_abc123def",
+  "workers_available": ["worker_0", "worker_1"], // Array of string worker IDs
   "server_info": {
     "version": "1.0.0",
-    "max_workers": 2,
-    "capabilities": [
-      "move_to",
-      "gather", 
-      "craft",
-      "place_block",
-      "query_status"
-    ]
+    "max_workers": 5,
+    "capabilities": ["move_to", "gather", "craft", "place_block", "query_status"]
   }
 }
 ```
 
-**Note**: This message only provides bot IDs. To get detailed bot information, the client must send `query_status` commands for each bot.
+**Note**: This message provides worker IDs as strings. To get detailed worker information, send `get_status` command.
 
 ### 2.2 Status Response
 
-Sent in response to `query_status` commands, contains detailed bot information:
+Sent in response to `get_status` or `query_status` commands:
 
 ```json
 {
-  "type": "status_response", // or "query_status_response"
-  "bot_id": 0,
-  "position": { "x": 15, "y": 64, "z": 25 },
-  "inventory": { "minecraft:oak_log": 10 },
-  "current_job": "Gathering oak logs",
-  "status": "IN_PROGRESS", // IDLE|IN_PROGRESS|COMPLETE|FAILED|BLOCKED
-  "last_activity": "Started gathering",
-  "utilization": 75 // percentage 0-100
+  "status": "success",
+  "data": {
+    "workers": [
+      {
+        "id": "worker_0",
+        "position": { "x": 100, "y": 64, "z": 200 },
+        "inventory": { "oak_log": 3, "stone": 12 },
+        "status": "IDLE", // or "BUSY"
+        "current_job": null, // or job_id string
+        "health": 20.0,
+        "utilization": 0.0 // 1.0 if BUSY, 0.0 if IDLE
+      }
+    ],
+    "task_active": false,
+    "active_jobs": [],
+    "start_time": null, // or timestamp
+    "current_time": 1703123456789
+  }
 }
 ```
 
@@ -223,29 +217,71 @@ Sent when individual bot status changes (if server supports real-time updates):
 }
 ```
 
-### 2.4 Bot Events
+### 2.3 Worker Events
 
-Real-time events from bots:
+Real-time events from workers (lowercase event types):
 
+**Worker Start Event:**
 ```json
 {
-  "type": "bot_event",
-  "bot_id": 1,
-  "event_type": "START", // START|PROGRESS|COMPLETE|FAILED|BLOCKED
-  "job_id": "job_1234567890123", // optional
-  "message": "Bot 1 started gathering oak logs",
-  "details": { /* optional additional data */ },
-  "error_code": "EXECUTION_FAILED", // optional, for FAILED events
-  "timestamp": 1234567890123
+  "type": "start",
+  "bot_id": "worker_0",
+  "job_id": "move_123",
+  "timestamp": 1703123456789,
+  "command": {
+    "cmd": "move_to",
+    "parameters": {"target": {"x": 100, "y": 64, "z": 200}}
+  }
+}
+```
+
+**Worker Progress Event:**
+```json
+{
+  "type": "progress",
+  "bot_id": "worker_0", 
+  "job_id": "gather_001",
+  "timestamp": 1703123456889,
+  "progress": 0.6,
+  "current": {"x": 102, "y": 64, "z": 198},
+  "target": {"x": 100, "y": 64, "z": 200}
+}
+```
+
+**Worker Complete Event:**
+```json
+{
+  "type": "complete",
+  "bot_id": "worker_0",
+  "job_id": "gather_001", 
+  "timestamp": 1703123456989,
+  "result": {
+    "position": {"x": 100, "y": 64, "z": 200},
+    "inventory_changes": {"oak_log": 3},
+    "collected": ["oak_log", "oak_log", "oak_log"]
+  }
+}
+```
+
+**Worker Failed Event:**
+```json
+{
+  "type": "failed",
+  "bot_id": "worker_0",
+  "job_id": "craft_001",
+  "timestamp": 1703123457089,
+  "error": {
+    "code": "INSUFFICIENT_MATERIALS",
+    "message": "Not enough oak_log in inventory"
+  }
 }
 ```
 
 #### Event Types:
-- **START**: Bot began executing a command
-- **PROGRESS**: Bot is making progress on a task
-- **COMPLETE**: Bot successfully completed a command
-- **FAILED**: Bot failed to complete a command
-- **BLOCKED**: Bot is blocked and cannot proceed
+- **start**: Worker began executing a command  
+- **progress**: Worker is making progress on a task
+- **complete**: Worker successfully completed a command
+- **failed**: Worker failed to complete a command
 
 ### 2.5 Block Completion Events
 
@@ -280,30 +316,43 @@ Sent when task state changes:
 
 ## 3. Data Structures
 
-### 3.1 Bot Status Object
+### 3.1 Worker Status Object (Client-side representation)
 ```typescript
 interface BotStatus {
-  id: number;
+  id: string; // e.g., "worker_0"
   position: { x: number; y: number; z: number };
   inventory: { [item: string]: number };
-  current_job: string;
+  currentJob: string;
   status: 'IDLE' | 'IN_PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED';
-  last_activity: string;
+  lastActivity: string;
   utilization: number; // percentage 0-100
 }
 ```
 
-### 3.2 Bot Event Object
+### 3.2 Worker Object (Server format)
+```typescript
+interface Worker {
+  id: string; // e.g., "worker_0"
+  position: { x: number; y: number; z: number };
+  inventory: { [item: string]: number };
+  status: 'IDLE' | 'BUSY';
+  current_job: string | null;
+  health: number;
+  utilization: number; // 0.0 to 1.0
+}
+```
+
+### 3.3 Bot Event Object (Client-side)
 ```typescript
 interface BotEvent {
   id: string; // Generated client-side
   timestamp: number;
-  bot_id: number;
-  event_type: 'START' | 'PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED';
-  job_id?: string;
+  botId: string; // e.g., "worker_0"
+  type: 'START' | 'PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'COMMAND_SENT';
+  jobId?: string;
   message: string;
   details?: any;
-  error_code?: string;
+  errorCode?: string;
 }
 ```
 
@@ -311,21 +360,21 @@ interface BotEvent {
 
 ## 4. Status Polling Pattern
 
-Since the server only provides bot IDs on connection, the GUI implements a polling pattern to maintain up-to-date bot information:
+The client uses a simplified polling pattern to maintain up-to-date worker information:
 
 ### 4.1 Polling Behavior
-- **Initial Query**: Immediately send `query_status` for all bots after receiving `connection_established`
-- **Continuous Polling**: Send `query_status` commands every 1 second for all active bots
-- **Response Processing**: Update bot state from `status_response` messages
+- **Initial Query**: Send `get_status` immediately after receiving `connection_established`
+- **Continuous Polling**: Send `get_status` every 1 second to get all worker statuses
+- **Response Processing**: Update worker state from server's status response
 - **Cleanup**: Stop polling on disconnect or error
 
 ### 4.2 Implementation Flow
 ```
-1. Connect → Receive connection_established with bot IDs [0, 1]
-2. Create placeholder bot objects with those IDs
-3. Send query_status for bot 0 and bot 1 immediately
-4. Set up 1-second interval to repeat query_status commands
-5. Process status_response messages to update bot details
+1. Connect → Receive connection_established with worker IDs ["worker_0", "worker_1"]
+2. Create placeholder bot objects with string IDs
+3. Send get_status immediately  
+4. Set up 1-second interval to repeat get_status command
+5. Process status response with nested workers data
 6. Stop polling on disconnect
 ```
 
@@ -373,17 +422,16 @@ Since the server only provides bot IDs on connection, the GUI implements a polli
 
 ```
 1. Client connects to ws://localhost:8080
-2. Server → Client: connection_established (bot IDs: [0, 1])
-3. Client → Server: query_status (bot 0)
-4. Client → Server: query_status (bot 1)
-5. Server → Client: status_response (bot 0 details)
-6. Server → Client: status_response (bot 1 details)
-7. [Every 1 second: repeat steps 3-6]
-8. Client → Server: manager_command (gather, bot 0)
-9. Server → Client: bot_event (START, bot 0)
-10. Server → Client: status_response (bot 0: IN_PROGRESS)
-11. Server → Client: bot_event (COMPLETE, bot 0) [after 2-5 seconds]
-12. Server → Client: status_response (bot 0: IDLE with updated inventory)
+2. Server → Client: connection_established (worker IDs: ["worker_0", "worker_1"])
+3. Client → Server: get_status
+4. Server → Client: status response (nested workers data)
+5. [Every 1 second: repeat steps 3-4]
+6. Client → Server: gather command (worker_0)
+7. Server → Client: success response (job_id)
+8. Server → Client: start event (worker_0)
+9. Server → Client: progress event (worker_0)
+10. Server → Client: complete event (worker_0) [after execution]
+11. Next get_status response shows updated worker inventory
 ```
 
 ---

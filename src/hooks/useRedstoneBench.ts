@@ -48,6 +48,40 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
   const statusPollInterval = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef<number>(0);
 
+  const queryAllBots = useCallback(() => {
+    if (websocket.current?.readyState === WebSocket.OPEN) {
+      // Use server's get_status format to get all workers
+      websocket.current.send(JSON.stringify({
+        type: 'get_status'
+      }));
+    }
+  }, []);
+
+  const startStatusPolling = useCallback((botIds: string[]) => {
+    // Clear any existing polling
+    if (statusPollInterval.current) {
+      clearInterval(statusPollInterval.current);
+    }
+
+    // Query all bots immediately
+    queryAllBots();
+
+    // Set up polling every 1 second
+    statusPollInterval.current = setInterval(() => {
+      queryAllBots();
+    }, 1000);
+
+    console.log('🔄 Started status polling for bots:', botIds);
+  }, [queryAllBots]);
+
+  const stopStatusPolling = useCallback(() => {
+    if (statusPollInterval.current) {
+      clearInterval(statusPollInterval.current);
+      statusPollInterval.current = null;
+      console.log('⏹️ Stopped status polling');
+    }
+  }, []);
+
   const connectWebSocket = useCallback(() => {
     if (websocket.current?.readyState === WebSocket.OPEN) {
       return;
@@ -80,8 +114,8 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
           if (data.type === 'connection_established') {
             // Handle connection_established message with workers_available IDs
             if (data.workers_available && Array.isArray(data.workers_available)) {
-              const newBots: BotStatus[] = data.workers_available.map((botId: number) => ({
-                id: botId,
+              const newBots: BotStatus[] = data.workers_available.map((botId: string) => ({
+                id: botId, // Keep as string (e.g., "worker_0")
                 position: { x: 0, y: 64, z: 0 },
                 inventory: {},
                 currentJob: 'Querying status...',
@@ -114,16 +148,36 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
                 } : bot
               )
             }));
-          } else if (data.type === 'bot_event') {
+          } else if (data.type === 'start' || data.type === 'progress' || data.type === 'complete' || data.type === 'failed') {
+            // Handle server's worker event format (lowercase types)
+            const eventTypeMap: {[key: string]: string} = {
+              'start': 'START',
+              'progress': 'PROGRESS', 
+              'complete': 'COMPLETE',
+              'failed': 'FAILED'
+            };
+
+            const generateEventMessage = (eventData: any) => {
+              const botId = eventData.bot_id;
+              const jobId = eventData.job_id;
+              switch (eventData.type) {
+                case 'start': return `Worker ${botId} started job ${jobId}`;
+                case 'progress': return `Worker ${botId} making progress on ${jobId}`;
+                case 'complete': return `Worker ${botId} completed job ${jobId}`;
+                case 'failed': return `Worker ${botId} failed job ${jobId}: ${eventData.error?.message || 'Unknown error'}`;
+                default: return `Worker ${botId} event: ${eventData.type}`;
+              }
+            };
+
             const newEvent: BotEvent = {
               id: (++eventIdCounter.current).toString(),
               timestamp: data.timestamp || Date.now(),
               botId: data.bot_id,
-              type: data.event_type,
+              type: eventTypeMap[data.type] || data.type.toUpperCase(),
               jobId: data.job_id,
-              message: data.message,
-              details: data.details,
-              errorCode: data.error_code
+              message: data.message || generateEventMessage(data),
+              details: data.result || data.error || data.current,
+              errorCode: data.error?.code
             };
 
             setState(prev => ({
@@ -152,21 +206,31 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
               ...prev,
               completedBlocks: new Set([...Array.from(prev.completedBlocks), blockKey])
             }));
-          } else if (data.type === 'status_response' || data.type === 'query_status_response') {
-            // Handle detailed bot status response from query_status command
+          } else if (data.status === 'success' && data.data && data.data.workers) {
+            // Handle server's status response format: {status: "success", data: {workers: [...]}}
+            const workers = data.data.workers;
             setState(prev => ({
               ...prev,
-              bots: prev.bots.map(bot => 
-                bot.id === data.bot_id ? {
-                  ...bot,
-                  position: data.position || bot.position,
-                  inventory: data.inventory || bot.inventory,
-                  currentJob: data.current_job || data.currentJob || bot.currentJob,
-                  status: data.status || bot.status,
-                  lastActivity: data.last_activity || data.lastActivity || bot.lastActivity,
-                  utilization: data.utilization !== undefined ? data.utilization : bot.utilization
-                } : bot
-              )
+              bots: prev.bots.map(bot => {
+                const serverWorker = workers.find((w: any) => w.id === bot.id);
+                if (serverWorker) {
+                  return {
+                    ...bot,
+                    position: serverWorker.position || bot.position,
+                    inventory: serverWorker.inventory || bot.inventory,
+                    currentJob: serverWorker.current_job || (serverWorker.status === 'IDLE' ? 'Idle - awaiting commands' : 'Working'),
+                    status: serverWorker.status === 'BUSY' ? 'IN_PROGRESS' : 'IDLE',
+                    lastActivity: serverWorker.current_job || 'Connected',
+                    utilization: serverWorker.utilization || 0
+                  };
+                }
+                return bot;
+              }),
+              taskStats: {
+                ...prev.taskStats,
+                isRunning: data.data.task_active || false,
+                startTime: data.data.start_time || prev.taskStats.startTime
+              }
             }));
           }
         } catch (error) {
@@ -224,45 +288,8 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     }
   }, [websocketUrl]);
 
-  const startStatusPolling = useCallback((botIds: number[]) => {
-    // Clear any existing polling
-    if (statusPollInterval.current) {
-      clearInterval(statusPollInterval.current);
-    }
 
-    // Query all bots immediately
-    queryAllBots(botIds);
-
-    // Set up polling every 1 second
-    statusPollInterval.current = setInterval(() => {
-      queryAllBots(botIds);
-    }, 1000);
-
-    console.log('🔄 Started status polling for bots:', botIds);
-  }, []);
-
-  const queryAllBots = useCallback((botIds: number[]) => {
-    if (websocket.current?.readyState === WebSocket.OPEN) {
-      botIds.forEach(botId => {
-        websocket.current!.send(JSON.stringify({
-          type: 'manager_command',
-          command: 'query_status',
-          bot_id: botId,
-          timestamp: Date.now()
-        }));
-      });
-    }
-  }, []);
-
-  const stopStatusPolling = useCallback(() => {
-    if (statusPollInterval.current) {
-      clearInterval(statusPollInterval.current);
-      statusPollInterval.current = null;
-      console.log('⏹️ Stopped status polling');
-    }
-  }, []);
-
-  // Initialize WebSocket connection
+  // Initialize WebSocket connection 
   useEffect(() => {
     connectWebSocket();
 
@@ -277,16 +304,79 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     };
   }, [connectWebSocket, stopStatusPolling]);
 
+  // Transform client command format to server format
+  const transformCommandForServer = useCallback((command: any) => {
+    const baseCommand = {
+      type: command.command,
+      bot_id: command.bot_id || 0,
+      job_id: `gui_job_${Date.now()}`
+    };
+
+    // Handle specific command transformations
+    switch (command.command) {
+      case 'move_to':
+        return {
+          ...baseCommand,
+          target: {
+            x: command.x,
+            y: command.y, 
+            z: command.z
+          }
+        };
+      
+      case 'gather':
+        return {
+          ...baseCommand,
+          resource: command.resource?.replace('minecraft:', '') || command.resource,
+          quantity: command.quantity || 1,
+          ...(command.region && {
+            area: {
+              x1: command.region.x1,
+              z1: command.region.z1,
+              x2: command.region.x2,
+              z2: command.region.z2
+            }
+          })
+        };
+      
+      case 'craft':
+        return {
+          ...baseCommand,
+          item: command.item?.replace('minecraft:', '') || command.item,
+          quantity: command.quantity || 1
+        };
+      
+      case 'place_blueprint':
+        return {
+          ...baseCommand,
+          type: 'place_block', // Server uses place_block
+          block_type: command.block_type || 'stone',
+          coordinates: {
+            x: command.x,
+            y: command.y,
+            z: command.z
+          }
+        };
+      
+      case 'use_chest':
+        // Transform chest command if needed
+        return {
+          ...baseCommand,
+          action: command.action,
+          items: command.items,
+          chest_pos: command.chest_pos
+        };
+      
+      default:
+        return baseCommand;
+    }
+  }, []);
+
   const sendCommand = useCallback((command: any) => {
     if (websocket.current?.readyState === WebSocket.OPEN) {
-      // Send command to WebSocket server
-      websocket.current.send(JSON.stringify({
-        type: 'manager_command',
-        command: command.command,
-        bot_id: command.bot_id,
-        parameters: command,
-        timestamp: Date.now()
-      }));
+      // Transform command to server format
+      const serverCommand = transformCommandForServer(command);
+      websocket.current.send(JSON.stringify(serverCommand));
     }
 
     // Add local event for immediate feedback
@@ -336,12 +426,14 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     console.log('Command sent:', command);
   }, []);
 
-  const queryBot = useCallback((botId: number) => {
-    sendCommand({
-      command: 'query_status',
-      bot_id: botId
-    });
-  }, [sendCommand]);
+  const queryBot = useCallback((_botId: string) => {
+    // Use get_status instead of individual bot queries
+    if (websocket.current?.readyState === WebSocket.OPEN) {
+      websocket.current.send(JSON.stringify({
+        type: 'get_status'
+      }));
+    }
+  }, []);
 
   const clearEventLog = useCallback(() => {
     setState(prevState => ({
@@ -371,7 +463,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     const startEvent: BotEvent = {
       id: (++eventIdCounter.current).toString(),
       timestamp: Date.now(),
-      botId: 0, // System event
+      botId: 'system', // System event
       type: 'START',
       message: 'Task started: Build Sugar Cane Farm'
     };
@@ -402,7 +494,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     const stopEvent: BotEvent = {
       id: (++eventIdCounter.current).toString(),
       timestamp: Date.now(),
-      botId: 0, // System event
+      botId: 'system', // System event
       type: 'COMPLETE',
       message: 'Task stopped by manager'
     };
@@ -443,7 +535,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     const testEvent: BotEvent = {
       id: (++eventIdCounter.current).toString(),
       timestamp: Date.now(),
-      botId: 0, // System event
+      botId: 'system', // System event
       type: 'START',
       message: 'Running functional test: Accelerating game time and checking sugar cane output...'
     };
@@ -459,7 +551,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       const resultEvent: BotEvent = {
         id: (++eventIdCounter.current).toString(),
         timestamp: Date.now(),
-        botId: 0,
+        botId: 'system',
         type: isSuccess ? 'COMPLETE' : 'FAILED',
         message: isSuccess 
           ? 'Functional test PASSED: Sugar cane farm produced 24 items in output chest'
@@ -482,7 +574,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     const regionEvent: BotEvent = {
       id: (++eventIdCounter.current).toString(),
       timestamp: Date.now(),
-      botId: 0,
+      botId: 'system',
       type: 'COMMAND_SENT',
       message: `Selected blueprint region: ${region} for construction planning`
     };

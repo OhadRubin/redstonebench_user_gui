@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface CommandCenterProps {
   onCommandSent: (command: any) => void;
-  availableBots: number[];
+  availableBots: string[]; // Changed to string to match server format
 }
 
 const CommandCenter: React.FC<CommandCenterProps> = ({ onCommandSent, availableBots }) => {
-  const [selectedBot, setSelectedBot] = useState<number>(1);
+  const [selectedBot, setSelectedBot] = useState<string>('');
   const [selectedCommand, setSelectedCommand] = useState<string>('gather');
+
+  // Update selected bot when available bots change
+  useEffect(() => {
+    if (availableBots.length > 0 && (!selectedBot || !availableBots.includes(selectedBot))) {
+      setSelectedBot(availableBots[0]);
+    }
+  }, [availableBots, selectedBot]);
 
   // Form states for different commands
   const [gatherForm, setGatherForm] = useState({
@@ -313,7 +320,7 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ onCommandSent, availableB
           <select 
             style={selectStyle}
             value={selectedBot}
-            onChange={(e) => setSelectedBot(parseInt(e.target.value))}
+            onChange={(e) => setSelectedBot(e.target.value)}
           >
             {availableBots.map(botId => (
               <option key={botId} value={botId}>Bot {botId}</option>

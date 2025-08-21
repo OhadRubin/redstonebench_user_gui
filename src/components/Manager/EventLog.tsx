@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from 'react';
 export interface BotEvent {
   id: string;
   timestamp: number;
-  botId: number;
+  botId: string; // Changed to string to match server format (e.g., "worker_0")
   type: 'START' | 'PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'COMMAND_SENT';
   jobId?: string;
   message: string;
