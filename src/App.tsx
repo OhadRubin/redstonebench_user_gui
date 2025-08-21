@@ -120,9 +120,9 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      height: '450px',
+      height: '350px',
       flexShrink: 0, // Critical: prevents bottom panel from shrinking
-      minHeight: '450px' // Ensures minimum height is maintained
+      minHeight: '350px' // Ensures minimum height is maintained
     }}>
       {/* Left - Unit Selection (Compact) */}
       <div style={{ 
@@ -165,7 +165,7 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
           onMinimapClick={onMinimapClick}
         />
         {/* Keep a compact version of event log below minimap */}
-        <div style={{
+        {/* <div style={{
           flex: 1,
           background: 'linear-gradient(to bottom, #111 0%, #000 100%)',
           border: '2px solid #00ffff',
@@ -195,7 +195,7 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
               </div>
             ))}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );
