@@ -1,88 +1,157 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { BotStatus } from './WorkerDashboard';
+
+// Shared world bounds constants
+export const WORLD_BOUNDS = { minX: -500, maxX: 500, minZ: -500, maxZ: 500 };
 
 interface BotCanvasProps {
   bots: BotStatus[];
   selectedBot?: BotStatus | null;
   onBotSelect?: (bot: BotStatus) => void;
+  viewport?: { x: number; y: number; zoom: number };
+  onViewportChange?: (viewport: { x: number; y: number; zoom: number; width: number; height: number }) => void;
 }
 
-const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect }) => {
+const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, viewport: propViewport, onViewportChange }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Viewport state for panning and zooming
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
+  const [mouseWorldPos, setMouseWorldPos] = useState({ x: 0, y: 0 });
 
+  // Sync internal viewport state with prop
   useEffect(() => {
-    console.log('BotCanvas - useEffect triggered', {
-      botsCount: bots.length,
-      bots: bots,
-      selectedBotId: selectedBot?.id
-    });
+    if (propViewport) {
+      setViewport(propViewport);
+    }
+  }, [propViewport]);
 
+  // Notify parent of viewport changes with canvas dimensions
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas && onViewportChange) {
+      onViewportChange({
+        x: viewport.x,
+        y: viewport.y,
+        zoom: viewport.zoom,
+        width: canvas.width,
+        height: canvas.height
+      });
+    }
+  }, [viewport, onViewportChange]);
+
+  // Separate useEffect for canvas sizing to prevent resize loops
+  useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container) {
-      console.log('BotCanvas - Missing canvas or container');
-      return;
-    }
+    if (!canvas || !container) return;
+
+    const updateCanvasSize = () => {
+      const rect = container.getBoundingClientRect();
+      const newWidth = Math.floor(rect.width);
+      const newHeight = Math.floor(rect.height);
+      
+      // Only update if size actually changed to prevent unnecessary re-renders
+      if (canvas.width !== newWidth || canvas.height !== newHeight) {
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+      }
+    };
+
+    // Initial sizing
+    updateCanvasSize();
+
+    // Use ResizeObserver for efficient resize handling
+    const resizeObserver = new ResizeObserver(() => {
+      updateCanvasSize();
+    });
+    
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []); // Empty dependency array - only runs on mount/unmount
+
+  // Separate useEffect for drawing logic - no mousePos dependency
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      console.log('BotCanvas - Could not get canvas context');
-      return;
-    }
-
-    // Set canvas size to match container
-    const rect = container.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    if (!ctx) return;
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw grid background
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    const gridSize = 40;
+    // Apply viewport transformation
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.scale(viewport.zoom, viewport.zoom);
+    ctx.translate(-viewport.x, -viewport.y);
+
+    // Draw terrain-like background
+    const terrainSize = 60;
+    const offsetX = Math.floor(viewport.x / terrainSize) * terrainSize;
+    const offsetY = Math.floor(viewport.y / terrainSize) * terrainSize;
     
-    for (let x = 0; x <= canvas.width; x += gridSize) {
+    // Create a Minecraft-like world background
+    for (let x = offsetX - terrainSize * 3; x < offsetX + canvas.width / viewport.zoom + terrainSize * 3; x += terrainSize) {
+      for (let y = offsetY - terrainSize * 3; y < offsetY + canvas.height / viewport.zoom + terrainSize * 3; y += terrainSize) {
+        // Vary terrain types based on position
+        const hash = Math.abs(Math.sin(x * 0.01) * Math.cos(y * 0.01) * 1000);
+        const terrainType = Math.floor(hash % 3);
+        
+        if (terrainType === 0) {
+          // Grass terrain
+          ctx.fillStyle = '#2d5a27';
+        } else if (terrainType === 1) {
+          // Stone terrain
+          ctx.fillStyle = '#4a4a4a';
+        } else {
+          // Dirt terrain
+          ctx.fillStyle = '#8b4513';
+        }
+        
+        ctx.fillRect(x, y, terrainSize, terrainSize);
+        
+        // Add texture
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillRect(x, y, terrainSize, terrainSize / 8);
+        ctx.fillRect(x, y + terrainSize * 7/8, terrainSize, terrainSize / 8);
+      }
+    }
+
+    // Draw grid overlay
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1 / viewport.zoom;
+    const gridSize = 20;
+    
+    for (let x = offsetX - gridSize * 10; x < offsetX + canvas.width / viewport.zoom + gridSize * 10; x += gridSize) {
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
+      ctx.moveTo(x, offsetY - gridSize * 10);
+      ctx.lineTo(x, offsetY + canvas.height / viewport.zoom + gridSize * 10);
       ctx.stroke();
     }
     
-    for (let y = 0; y <= canvas.height; y += gridSize) {
+    for (let y = offsetY - gridSize * 10; y < offsetY + canvas.height / viewport.zoom + gridSize * 10; y += gridSize) {
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
+      ctx.moveTo(offsetX - gridSize * 10, y);
+      ctx.lineTo(offsetX + canvas.width / viewport.zoom + gridSize * 10, y);
       ctx.stroke();
     }
 
-    // Calculate bot positions (scale world coords to canvas)
-    const worldBounds = { minX: -100, maxX: 100, minZ: -100, maxZ: 100 };
-    const scaleX = canvas.width / (worldBounds.maxX - worldBounds.minX);
-    const scaleZ = canvas.height / (worldBounds.maxZ - worldBounds.minZ);
-
-    // Draw bots
-    console.log('BotCanvas - About to draw bots:', {
-      botsCount: bots.length,
-      worldBounds,
-      scaleX,
-      scaleZ,
-      canvasSize: { width: canvas.width, height: canvas.height }
-    });
-
-    bots.forEach((bot, index) => {
-      console.log(`BotCanvas - Drawing bot ${index}:`, bot);
-      
-      const canvasX = (bot.position.x - worldBounds.minX) * scaleX;
-      const canvasZ = (bot.position.z - worldBounds.minZ) * scaleZ;
-
-      console.log(`BotCanvas - Bot ${bot.id} canvas position:`, { canvasX, canvasZ });
+    // Draw bots as units in the world
+    bots.forEach((bot) => {
+      const worldX = bot.position.x * 5; // Scale up for better visibility
+      const worldZ = bot.position.z * 5;
 
       // Bot body
       const isSelected = selectedBot?.id === bot.id;
-      const radius = isSelected ? 12 : 8;
+      const size = isSelected ? 16 : 12;
       
       // Bot color based on team/status
       let botColor = '#3B82F6'; // Blue for player bots
@@ -90,74 +159,135 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect })
       else if (bot.status === 'BLOCKED') botColor = '#F59E0B';
       else if (bot.status === 'COMPLETE') botColor = '#10B981';
 
+      // Draw bot shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillRect(worldX - size/2 + 2, worldZ - size/2 + 2, size, size);
+
       // Draw selection ring
       if (isSelected) {
-        ctx.beginPath();
-        ctx.arc(canvasX, canvasZ, radius + 4, 0, 2 * Math.PI);
         ctx.strokeStyle = '#FCD34D';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+        ctx.lineWidth = 3 / viewport.zoom;
+        ctx.strokeRect(worldX - size/2 - 4, worldZ - size/2 - 4, size + 8, size + 8);
       }
 
-      // Draw bot
-      ctx.beginPath();
-      ctx.arc(canvasX, canvasZ, radius, 0, 2 * Math.PI);
+      // Draw bot as a square (like Minecraft)
       ctx.fillStyle = botColor;
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Bot ID label
+      ctx.fillRect(worldX - size/2, worldZ - size/2, size, size);
+      
+      // Add bot face/details
       ctx.fillStyle = '#fff';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${bot.id}`, canvasX, canvasZ + 4);
+      ctx.fillRect(worldX - 2, worldZ - 4, 2, 2); // Eyes
+      ctx.fillRect(worldX + 1, worldZ - 4, 2, 2);
+      ctx.fillRect(worldX - 1, worldZ - 1, 2, 1); // Mouth
 
-      // Draw position trail/path
-      ctx.beginPath();
-      ctx.arc(canvasX, canvasZ, radius + 8, 0, 2 * Math.PI);
-      ctx.strokeStyle = botColor + '40';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      // Bot ID label (scale with zoom)
+      const fontSize = Math.max(10, 12 / viewport.zoom);
+      ctx.fillStyle = '#fff';
+      ctx.font = `${fontSize}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2 / viewport.zoom;
+      ctx.strokeText(`Bot ${bot.id}`, worldX, worldZ + size + fontSize);
+      ctx.fillText(`Bot ${bot.id}`, worldX, worldZ + size + fontSize);
+
+      // Draw activity indicator
+      if (bot.currentJob && bot.status === 'IN_PROGRESS') {
+        ctx.fillStyle = '#00ff00';
+        ctx.beginPath();
+        ctx.arc(worldX + size/2, worldZ - size/2, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      }
     });
 
-    // Draw coordinate system
+    ctx.restore();
+
+    // Draw viewport coordinates only (not mouse coordinates to prevent re-renders)
     ctx.fillStyle = '#888';
     ctx.font = '10px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`World: ${worldBounds.minX},${worldBounds.minZ} to ${worldBounds.maxX},${worldBounds.maxZ}`, 10, 20);
+    ctx.fillText(`Viewport: x:${Math.round(viewport.x)}, y:${Math.round(viewport.y)}, zoom:${viewport.zoom.toFixed(2)}`, 10, 20);
 
-  }, [bots, selectedBot]);
+  }, [bots, selectedBot, viewport]); // Removed mousePos from dependencies to prevent jitter
 
-  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!onBotSelect) return;
-
+  // Convert screen coordinates to world coordinates
+  const screenToWorld = (screenX: number, screenY: number) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
+    if (!canvas) return { x: 0, y: 0 };
+    
     const rect = canvas.getBoundingClientRect();
-    const clickX = event.clientX - rect.left;
-    const clickY = event.clientY - rect.top;
+    const canvasX = screenX - rect.left - canvas.width / 2;
+    const canvasY = screenY - rect.top - canvas.height / 2;
+    
+    return {
+      x: viewport.x + canvasX / viewport.zoom,
+      y: viewport.y + canvasY / viewport.zoom
+    };
+  };
 
-    // Find clicked bot
-    const worldBounds = { minX: -100, maxX: 100, minZ: -100, maxZ: 100 };
-    const scaleX = canvas.width / (worldBounds.maxX - worldBounds.minX);
-    const scaleZ = canvas.height / (worldBounds.maxZ - worldBounds.minZ);
-
-    for (const bot of bots) {
-      const canvasX = (bot.position.x - worldBounds.minX) * scaleX;
-      const canvasZ = (bot.position.z - worldBounds.minZ) * scaleZ;
+  const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (event.button === 0) { // Left click
+      const worldPos = screenToWorld(event.clientX, event.clientY);
       
-      const distance = Math.sqrt(
-        Math.pow(clickX - canvasX, 2) + Math.pow(clickY - canvasZ, 2)
-      );
-
-      if (distance <= 15) { // Click tolerance
-        onBotSelect(bot);
-        return;
+      // Check if clicking on a bot
+      let clickedBot = null;
+      for (const bot of bots) {
+        const worldX = bot.position.x * 5;
+        const worldZ = bot.position.z * 5;
+        const distance = Math.sqrt(
+          Math.pow(worldPos.x - worldX, 2) + Math.pow(worldPos.y - worldZ, 2)
+        );
+        
+        if (distance <= 20) { // Click tolerance
+          clickedBot = bot;
+          break;
+        }
+      }
+      
+      if (clickedBot && onBotSelect) {
+        onBotSelect(clickedBot);
+      } else {
+        // Start panning
+        setIsPanning(true);
+        setLastPanPoint({ x: event.clientX, y: event.clientY });
       }
     }
+  };
+
+  const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const worldPos = screenToWorld(event.clientX, event.clientY);
+    setMouseWorldPos(worldPos);
+    
+    if (isPanning) {
+      const deltaX = event.clientX - lastPanPoint.x;
+      const deltaY = event.clientY - lastPanPoint.y;
+      
+      setViewport(prev => ({
+        ...prev,
+        x: prev.x - deltaX / prev.zoom,
+        y: prev.y - deltaY / prev.zoom
+      }));
+      
+      setLastPanPoint({ x: event.clientX, y: event.clientY });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
+    const newZoom = Math.max(0.1, Math.min(5, viewport.zoom * zoomFactor));
+    
+    setViewport(prev => ({
+      ...prev,
+      zoom: newZoom
+    }));
+  };
+
+  const resetViewport = () => {
+    setViewport({ x: 0, y: 0, zoom: 1 });
   };
 
   return (
@@ -167,37 +297,97 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect })
         width: '100%', 
         height: '100%', 
         position: 'relative',
-        background: 'linear-gradient(135deg, #0f1419 0%, #1a2332 100%)',
-        border: '1px solid #333',
+        background: `
+          radial-gradient(circle at 25% 25%, #1a1a2e 0%, transparent 50%),
+          radial-gradient(circle at 75% 75%, #16213e 0%, transparent 50%),
+          linear-gradient(45deg, transparent 30%, rgba(0,255,255,0.05) 50%, transparent 70%)
+        `,
+        border: '2px solid #00ffff',
         borderRadius: '8px',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        minHeight: 0, // Allow container to shrink below content size
+        maxHeight: '100%' // Prevent container from growing beyond parent
       }}
     >
-
-
-      {/* Bot count indicator */}
+      {/* Bot count and viewport info */}
       <div style={{
         position: 'absolute',
         top: '12px',
         right: '12px',
-        background: 'rgba(0, 0, 0, 0.7)',
+        background: 'rgba(0, 0, 0, 0.8)',
         color: '#00ff44',
-        padding: '4px 8px',
-        borderRadius: '6px',
-        fontSize: '12px',
+        padding: '8px 12px',
+        borderRadius: '8px',
+        fontSize: '11px',
+        zIndex: 10,
+        fontFamily: "'Courier New', monospace"
+      }}>
+        <div style={{ color: '#00ffff', fontWeight: 'bold', marginBottom: '4px' }}>
+          🎯 Battlefield View
+        </div>
+        <div>{bots.length} Bots Active</div>
+        <div>Zoom: {viewport.zoom.toFixed(2)}x</div>
+      </div>
+
+      {/* Viewport controls */}
+      <div style={{
+        position: 'absolute',
+        top: '12px',
+        left: '12px',
+        background: 'rgba(0, 0, 0, 0.8)',
+        padding: '8px',
+        borderRadius: '8px',
+        display: 'flex',
+        gap: '8px',
         zIndex: 10
       }}>
-        {bots.length} Bots Active
+        <button
+          onClick={resetViewport}
+          style={{
+            background: 'rgba(0, 255, 255, 0.2)',
+            color: '#00ffff',
+            border: '1px solid #00ffff',
+            borderRadius: '4px',
+            padding: '6px 12px',
+            cursor: 'pointer',
+            fontSize: '10px',
+            fontWeight: 'bold'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 255, 255, 0.3)'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0, 255, 255, 0.2)'}
+        >
+          🏠 Reset View
+        </button>
+      </div>
+
+      {/* Mouse coordinates overlay - separate from canvas to prevent re-renders */}
+      <div style={{
+        position: 'absolute',
+        top: '50px',
+        left: '12px',
+        background: 'rgba(0, 0, 0, 0.7)',
+        color: '#888',
+        padding: '6px 8px',
+        borderRadius: '4px',
+        fontSize: '10px',
+        fontFamily: 'monospace',
+        zIndex: 10
+      }}>
+        Mouse: {Math.round(mouseWorldPos.x)}, {Math.round(mouseWorldPos.y)}
       </div>
 
       {/* Canvas */}
       <canvas
         ref={canvasRef}
-        onClick={handleCanvasClick}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
         style={{
           width: '100%',
           height: '100%',
-          cursor: 'crosshair'
+          cursor: isPanning ? 'grabbing' : 'grab'
         }}
       />
 
@@ -206,29 +396,30 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect })
         position: 'absolute',
         bottom: '12px',
         left: '12px',
-        background: 'rgba(0, 0, 0, 0.8)',
+        background: 'rgba(0, 0, 0, 0.9)',
         color: '#fff',
-        padding: '8px',
-        borderRadius: '6px',
+        padding: '10px',
+        borderRadius: '8px',
         fontSize: '10px',
-        zIndex: 10
+        zIndex: 10,
+        fontFamily: "'Courier New', monospace"
       }}>
-        <div style={{ marginBottom: '4px', fontWeight: 'bold', color: '#00ffff' }}>Legend:</div>
+        <div style={{ marginBottom: '6px', fontWeight: 'bold', color: '#00ffff' }}>🔧 Bot Status:</div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3B82F6' }} />
+            <div style={{ width: '8px', height: '8px', background: '#3B82F6' }} />
             <span>Active</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }} />
+            <div style={{ width: '8px', height: '8px', background: '#10B981' }} />
             <span>Complete</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B' }} />
+            <div style={{ width: '8px', height: '8px', background: '#F59E0B' }} />
             <span>Blocked</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#EF4444' }} />
+            <div style={{ width: '8px', height: '8px', background: '#EF4444' }} />
             <span>Failed</span>
           </div>
         </div>
@@ -239,14 +430,20 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect })
         position: 'absolute',
         bottom: '12px',
         right: '12px',
-        background: 'rgba(0, 0, 0, 0.7)',
+        background: 'rgba(0, 0, 0, 0.8)',
         color: '#888',
-        padding: '6px 8px',
-        borderRadius: '4px',
+        padding: '8px 12px',
+        borderRadius: '6px',
         fontSize: '10px',
-        zIndex: 10
+        zIndex: 10,
+        fontFamily: "'Courier New', monospace"
       }}>
-        Click bots to select
+        <div style={{ color: '#00ffff', fontWeight: 'bold', marginBottom: '4px' }}>
+          ⌨️ Controls:
+        </div>
+        <div>🖱️ Click bots to select</div>
+        <div>🖱️ Drag to pan</div>
+        <div>🔍 Scroll to zoom</div>
       </div>
     </div>
   );

@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useRedstoneBench } from './hooks/useRedstoneBench';
 import CommandCenter from './components/Manager/CommandCenter';
 import WorkerDashboard, { BotStatus } from './components/Manager/WorkerDashboard';
-import EventLog from './components/Manager/EventLog';
 import BlueprintViewer from './components/Manager/BlueprintViewer';
 import TaskProgressPanel from './components/Manager/TaskProgressPanel';
 import BotCanvas from './components/Manager/BotCanvas';
+import Minimap from './components/Manager/Minimap';
 import './App.css';
 
 // Top Bar Component - Task Progress and Connection Status
@@ -36,7 +36,8 @@ const TopBar = ({ taskStats, connectionStatus }: { taskStats: any, connectionSta
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      fontFamily: "'Courier New', monospace"
+      fontFamily: "'Courier New', monospace",
+      flexShrink: 0 // Prevent top bar from shrinking
     }}>
       {/* Left side - Task metrics */}
       <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
@@ -95,8 +96,20 @@ const TopBar = ({ taskStats, connectionStatus }: { taskStats: any, connectionSta
   );
 };
 
-// Bottom Panel Container
-const BottomPanel = ({ bots, availableBots, events, taskStats, actions, selectedBot }: any) => {
+// Bottom Panel Container interfaces
+interface BottomPanelProps {
+  bots: BotStatus[];
+  availableBots: string[];
+  events: any[];
+  taskStats: any;
+  actions: any;
+  selectedBot: BotStatus | null;
+  viewport: { x: number; y: number; zoom: number };
+  mainCanvasDimensions: { width: number; height: number };
+  onMinimapClick: (worldX: number, worldY: number) => void;
+}
+
+const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, taskStats, actions, selectedBot, viewport, mainCanvasDimensions, onMinimapClick }) => {
   return (
     <div style={{
       background: 'linear-gradient(to bottom, #111 0%, #000 100%)',
@@ -104,7 +117,9 @@ const BottomPanel = ({ bots, availableBots, events, taskStats, actions, selected
       borderTop: '2px solid #00ffff',
       display: 'flex',
       gap: '16px',
-      height: '300px'
+      height: '300px',
+      flexShrink: 0, // Critical: prevents bottom panel from shrinking
+      minHeight: '300px' // Ensures minimum height is maintained
     }}>
       {/* Left - Worker Dashboard (Unit Info equivalent) */}
       <div style={{ width: '320px' }}>
@@ -123,12 +138,47 @@ const BottomPanel = ({ bots, availableBots, events, taskStats, actions, selected
         />
       </div>
 
-      {/* Right - Event Log (Minimap equivalent) */}
-      <div style={{ width: '320px' }}>
-        <EventLog
-          events={events}
-          onClearLog={actions.clearEventLog}
+      {/* Right - Minimap (replacing Event Log) */}
+      <div style={{ width: '220px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <Minimap
+          bots={bots}
+          selectedBot={selectedBot}
+          viewport={viewport}
+          mainCanvasDimensions={mainCanvasDimensions}
+          onMinimapClick={onMinimapClick}
         />
+        {/* Keep a compact version of event log below minimap */}
+        <div style={{
+          flex: 1,
+          background: 'linear-gradient(to bottom, #111 0%, #000 100%)',
+          border: '2px solid #00ffff',
+          borderRadius: '8px',
+          padding: '8px',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            color: '#00ffff',
+            fontSize: '10px',
+            fontWeight: 'bold',
+            marginBottom: '4px',
+            fontFamily: "'Courier New', monospace"
+          }}>
+            📋 Recent Events
+          </div>
+          <div style={{
+            maxHeight: '60px',
+            overflow: 'auto',
+            fontSize: '9px',
+            color: '#aaa',
+            fontFamily: "'Courier New', monospace"
+          }}>
+            {events.slice(-3).map((event: any, index: number) => (
+              <div key={index} style={{ marginBottom: '2px' }}>
+                {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : ''}: {event.message}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -146,8 +196,23 @@ function App() {
 
   const [selectedBot, setSelectedBot] = useState<BotStatus | null>(null);
   const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+  const [mainCanvasDimensions, setMainCanvasDimensions] = useState({ width: 800, height: 600 });
 
   const availableBots = bots.map(bot => bot.id);
+
+  const handleViewportChange = (newViewport: { x: number; y: number; zoom: number; width: number; height: number }) => {
+    setViewport({ x: newViewport.x, y: newViewport.y, zoom: newViewport.zoom });
+    setMainCanvasDimensions({ width: newViewport.width, height: newViewport.height });
+  };
+
+  const handleMinimapClick = (worldX: number, worldY: number) => {
+    setViewport(prev => ({
+      ...prev,
+      x: worldX,
+      y: worldY
+    }));
+  };
 
   // Debug logs (commented out to reduce console spam)
   // console.log('App.tsx - Debug Info:', {
@@ -180,12 +245,16 @@ function App() {
           radial-gradient(circle at 75% 75%, #16213e 0%, transparent 50%),
           linear-gradient(45deg, transparent 30%, rgba(0,255,255,0.05) 50%, transparent 70%)
         `,
-        padding: '16px'
+        padding: '16px',
+        minHeight: 0, // Critical: allows flex item to shrink below content size
+        overflow: 'hidden' // Prevents content from expanding beyond container
       }}>
         <BotCanvas
           bots={bots}
           selectedBot={selectedBot}
           onBotSelect={setSelectedBot}
+          viewport={viewport}
+          onViewportChange={handleViewportChange}
         />
         
         {/* Control buttons overlay */}
@@ -221,7 +290,7 @@ function App() {
         </div>
       </div>
 
-      {/* Bottom Panel - Worker Dashboard, Commands, Event Log */}
+      {/* Bottom Panel - Worker Dashboard, Commands, Minimap */}
       <BottomPanel 
         bots={bots}
         availableBots={availableBots}
@@ -229,6 +298,9 @@ function App() {
         taskStats={taskStats}
         actions={actions}
         selectedBot={selectedBot}
+        viewport={viewport}
+        mainCanvasDimensions={mainCanvasDimensions}
+        onMinimapClick={handleMinimapClick}
       />
 
       {/* Contextual Blueprint Viewer */}
