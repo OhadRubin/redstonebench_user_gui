@@ -45,6 +45,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
   const websocket = useRef<WebSocket | null>(null);
   const eventIdCounter = useRef(Date.now());
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
+  const statusPollInterval = useRef<NodeJS.Timeout | null>(null);
 
   const connectWebSocket = useCallback(() => {
     if (websocket.current?.readyState === WebSocket.OPEN) {
@@ -70,8 +71,31 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('📨 Received message from server:', JSON.stringify(data, null, 2));
           
-          if (data.type === 'bot_status_update') {
+          if (data.type === 'connection_established') {
+            // Handle connection_established message with workers_available IDs
+            if (data.workers_available && Array.isArray(data.workers_available)) {
+              const newBots: BotStatus[] = data.workers_available.map((botId: number) => ({
+                id: botId,
+                position: { x: 0, y: 64, z: 0 },
+                inventory: {},
+                currentJob: 'Querying status...',
+                status: 'IDLE' as const,
+                lastActivity: 'Connected',
+                utilization: 0
+              }));
+
+              setState(prev => ({
+                ...prev,
+                bots: newBots,
+                taskStats: { ...prev.taskStats, workerCount: newBots.length }
+              }));
+
+              // Start polling for bot status updates
+              startStatusPolling(data.workers_available);
+            }
+          } else if (data.type === 'bot_status_update') {
             setState(prev => ({
               ...prev,
               bots: prev.bots.map(bot => 
@@ -124,6 +148,22 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
               ...prev,
               completedBlocks: new Set([...Array.from(prev.completedBlocks), blockKey])
             }));
+          } else if (data.type === 'status_response' || data.type === 'query_status_response') {
+            // Handle detailed bot status response from query_status command
+            setState(prev => ({
+              ...prev,
+              bots: prev.bots.map(bot => 
+                bot.id === data.bot_id ? {
+                  ...bot,
+                  position: data.position || bot.position,
+                  inventory: data.inventory || bot.inventory,
+                  currentJob: data.current_job || data.currentJob || bot.currentJob,
+                  status: data.status || bot.status,
+                  lastActivity: data.last_activity || data.lastActivity || bot.lastActivity,
+                  utilization: data.utilization !== undefined ? data.utilization : bot.utilization
+                } : bot
+              )
+            }));
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -133,6 +173,12 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       ws.onclose = () => {
         console.log('Disconnected from RedstoneBench server');
         setState(prev => ({ ...prev, connectionStatus: 'disconnected' }));
+        
+        // Stop status polling when disconnected
+        if (statusPollInterval.current) {
+          clearInterval(statusPollInterval.current);
+          statusPollInterval.current = null;
+        }
         
         // Auto-reconnect after 2 seconds
         reconnectTimeout.current = setTimeout(() => {
@@ -153,10 +199,47 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     }
   }, [websocketUrl]);
 
+  const startStatusPolling = useCallback((botIds: number[]) => {
+    // Clear any existing polling
+    if (statusPollInterval.current) {
+      clearInterval(statusPollInterval.current);
+    }
+
+    // Query all bots immediately
+    queryAllBots(botIds);
+
+    // Set up polling every 1 second
+    statusPollInterval.current = setInterval(() => {
+      queryAllBots(botIds);
+    }, 1000);
+
+    console.log('🔄 Started status polling for bots:', botIds);
+  }, []);
+
+  const queryAllBots = useCallback((botIds: number[]) => {
+    if (websocket.current?.readyState === WebSocket.OPEN) {
+      botIds.forEach(botId => {
+        websocket.current!.send(JSON.stringify({
+          type: 'manager_command',
+          command: 'query_status',
+          bot_id: botId,
+          timestamp: Date.now()
+        }));
+      });
+    }
+  }, []);
+
+  const stopStatusPolling = useCallback(() => {
+    if (statusPollInterval.current) {
+      clearInterval(statusPollInterval.current);
+      statusPollInterval.current = null;
+      console.log('⏹️ Stopped status polling');
+    }
+  }, []);
+
   // Initialize WebSocket connection
   useEffect(() => {
     connectWebSocket();
-
 
     return () => {
       if (websocket.current) {
@@ -165,8 +248,9 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       if (reconnectTimeout.current) {
         clearTimeout(reconnectTimeout.current);
       }
+      stopStatusPolling();
     };
-  }, [connectWebSocket]);
+  }, [connectWebSocket, stopStatusPolling]);
 
   const sendCommand = useCallback((command: any) => {
     if (websocket.current?.readyState === WebSocket.OPEN) {

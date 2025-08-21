@@ -13,9 +13,10 @@ export interface BotStatus {
 interface WorkerDashboardProps {
   bots: BotStatus[];
   onQueryBot: (botId: number) => void;
+  selectedBot: BotStatus | null;
 }
 
-const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot }) => {
+const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot, selectedBot }) => {
   const getStatusColor = (status: BotStatus['status']) => {
     switch (status) {
       case 'IDLE': return '#888';
@@ -210,6 +211,22 @@ const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot }) =
           </div>
         )}
       </div>
+
+      {/* Selected Bot Section */}
+      {selectedBot && (
+        <div style={{ 
+          marginTop: '8px', 
+          padding: '8px', 
+          background: 'rgba(255, 255, 0, 0.1)',
+          border: '1px solid #ffff00',
+          borderRadius: '4px',
+          fontSize: '11px'
+        }}>
+          <div style={{ color: '#ffff00', fontWeight: 'bold' }}>Selected Bot:</div>
+          <div style={{ color: '#fff' }}>Bot {selectedBot.id} - {selectedBot.status}</div>
+          <div style={{ color: '#aaa' }}>Pos: ({selectedBot.position.x}, {selectedBot.position.y}, {selectedBot.position.z})</div>
+        </div>
+      )}
     </div>
   );
 };
