@@ -360,39 +360,84 @@ interface BotEvent {
 
 ## 4. Status Polling Pattern
 
-The client uses a simplified polling pattern to maintain up-to-date worker information:
+The client uses an automated polling pattern to maintain up-to-date worker information:
 
 ### 4.1 Polling Behavior
-- **Initial Query**: Send `get_status` immediately after receiving `connection_established`
-- **Continuous Polling**: Send `get_status` every 1 second to get all worker statuses
-- **Response Processing**: Update worker state from server's status response
-- **Cleanup**: Stop polling on disconnect or error
+- **Connection Trigger**: `startStatusPolling()` is called when `connection_established` is received
+- **Immediate Query**: First `get_status` sent immediately upon connection
+- **Continuous Polling**: `get_status` sent every 1 second via `setInterval()`
+- **Response Processing**: Updates worker state from server's `{status: "success", data: {...}}` response
+- **Automatic Cleanup**: Polling stops on WebSocket disconnect or error
 
 ### 4.2 Implementation Flow
 ```
-1. Connect → Receive connection_established with worker IDs ["worker_0", "worker_1"]
-2. Create placeholder bot objects with string IDs
-3. Send get_status immediately  
-4. Set up 1-second interval to repeat get_status command
-5. Process status response with nested workers data
-6. Stop polling on disconnect
+1. Client connects → Server sends connection_established with workers_available: ["worker_0", "worker_1"]
+2. Client creates placeholder BotStatus objects with string IDs  
+3. startStatusPolling(workers_available) called automatically
+4. First get_status sent immediately
+5. setInterval() established to send get_status every 1000ms
+6. Server responses processed to update worker dashboard
+7. clearInterval() called on disconnect/error
+```
+
+### 4.3 Polling Messages
+
+**Client Request (every 1 second):**
+```json
+{
+  "type": "get_status"
+}
+```
+
+**Server Response (expected):**
+```json
+{
+  "status": "success",
+  "data": {
+    "workers": [
+      {
+        "id": "worker_0",
+        "position": {"x": 100, "y": 64, "z": 200},
+        "inventory": {"oak_log": 3},
+        "status": "IDLE", // or "BUSY" 
+        "current_job": null,
+        "health": 20.0,
+        "utilization": 0.0
+      }
+    ],
+    "task_active": false,
+    "start_time": null,
+    "current_time": 1703123456789
+  }
+}
 ```
 
 ## 5. Connection Behavior
 
-### 5.1 Client Behavior
-- **Auto-reconnect**: Client automatically reconnects after 2 seconds on disconnect
+### 5.1 Client Behavior  
+- **Auto-reconnect**: Automatically reconnects every 2 seconds on disconnect
 - **Connection States**: `connecting` → `connected` → `disconnected`
-- **Polling Management**: Start polling on successful connection, stop on disconnect
-- **Fallback Mode**: If connection fails, GUI continues with test data
-- **Event Buffering**: Events are limited to 100 most recent entries
+- **Status Polling**: Automatically starts `get_status` polling on connection
+- **Polling Cleanup**: Stops polling on disconnect, resumes on reconnect
+- **Fallback Mode**: GUI continues with demo worker data if server unavailable
+- **Event Buffering**: Events limited to 100 most recent entries
 
-### 5.2 Server Expected Behavior
-- **Initial Connection**: Send `connection_established` message immediately with bot IDs
-- **Status Queries**: Respond to `query_status` with detailed `status_response` messages
-- **Command Processing**: Acknowledge commands with `START` event, followed by status updates
-- **Command Timing**: Commands should complete within 2-5 seconds
-- **Response Format**: Use consistent field names in status responses
+### 5.2 Connection Sequence
+```
+1. WebSocket connects to ws://localhost:8080
+2. Server sends connection_established with workers_available: ["worker_0", "worker_1"]  
+3. Client creates placeholder workers and starts 1-second get_status polling
+4. Client ready to send/receive commands and events
+5. On disconnect: polling stops, auto-reconnect begins
+6. On reconnect: polling resumes automatically
+```
+
+### 5.3 Server Expected Behavior
+- **Initial Connection**: Send `connection_established` immediately with string worker IDs
+- **Status Responses**: Respond to `get_status` with nested `{status: "success", data: {...}}` format
+- **Command Processing**: Send success/error response, then worker events (`start`, `progress`, `complete`, `failed`)
+- **Event Broadcasting**: Send lowercase worker events to all connected clients
+- **Consistent Format**: Use server protocol format (string IDs, nested responses)
 
 ---
 
@@ -420,18 +465,55 @@ The client uses a simplified polling pattern to maintain up-to-date worker infor
 
 ## 7. Example Communication Flow
 
+**Complete connection and command sequence:**
+
 ```
 1. Client connects to ws://localhost:8080
-2. Server → Client: connection_established (worker IDs: ["worker_0", "worker_1"])
-3. Client → Server: get_status
-4. Server → Client: status response (nested workers data)
-5. [Every 1 second: repeat steps 3-4]
-6. Client → Server: gather command (worker_0)
-7. Server → Client: success response (job_id)
-8. Server → Client: start event (worker_0)
-9. Server → Client: progress event (worker_0)
-10. Server → Client: complete event (worker_0) [after execution]
-11. Next get_status response shows updated worker inventory
+
+2. Server → Client: connection_established
+   {
+     "type": "connection_established",
+     "client_id": "client_1703123456789_abc123def", 
+     "workers_available": ["worker_0", "worker_1"],
+     "server_info": {...}
+   }
+
+3. Client automatically starts status polling:
+   Client → Server: {"type": "get_status"}
+
+4. Server → Client: status response 
+   {
+     "status": "success",
+     "data": {
+       "workers": [
+         {"id": "worker_0", "position": {...}, "status": "IDLE", ...}
+       ],
+       "task_active": false, ...
+     }
+   }
+
+5. [Every 1 second: Client sends get_status, Server responds with updated data]
+
+6. User sends command through GUI:
+   Client → Server: {
+     "type": "gather", 
+     "bot_id": "worker_0",
+     "resource": "oak_log",
+     "quantity": 5
+   }
+
+7. Server → Client: {"status": "success", "job_id": "gui_job_123"}
+
+8. Server → Client: start event
+   {"type": "start", "bot_id": "worker_0", "job_id": "gui_job_123"}
+
+9. Server → Client: progress event  
+   {"type": "progress", "bot_id": "worker_0", "progress": 0.5}
+
+10. Server → Client: complete event
+    {"type": "complete", "bot_id": "worker_0", "result": {...}}
+
+11. Next get_status response shows worker_0 with updated inventory
 ```
 
 ---
