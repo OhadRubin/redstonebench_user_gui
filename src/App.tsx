@@ -212,6 +212,24 @@ function App() {
   } = useRedstoneBench('ws://localhost:8080');
 
   const [selectedBot, setSelectedBot] = useState<BotStatus | null>(null);
+
+  // Handle bot selection with auto-centering (RTS standard behavior)
+  const handleBotSelection = (bot: BotStatus | null) => {
+    setSelectedBot(bot);
+    
+    // Auto-center viewport on selected bot (standard RTS behavior)
+    if (bot) {
+      // Use the same coordinate scaling as BotCanvas (factor of 5)
+      const worldX = bot.position.x * 5;
+      const worldZ = bot.position.y * 5; // bot.position.y contains the original z coordinate
+      
+      setViewport(prev => ({
+        ...prev,
+        x: worldX,
+        y: worldZ
+      }));
+    }
+  };
   const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   const [mainCanvasDimensions, setMainCanvasDimensions] = useState({ width: 800, height: 600 });
@@ -277,7 +295,7 @@ function App() {
         <BotCanvas
           bots={bots}
           selectedBot={selectedBot}
-          onBotSelect={setSelectedBot}
+          onBotSelect={handleBotSelection}
           viewport={viewport}
           onViewportChange={handleViewportChange}
         />
@@ -323,7 +341,7 @@ function App() {
         taskStats={taskStats}
         actions={actions}
         selectedBot={selectedBot}
-        onBotSelect={setSelectedBot}
+        onBotSelect={handleBotSelection}
         viewport={viewport}
         mainCanvasDimensions={mainCanvasDimensions}
         onMinimapClick={handleMinimapClick}
