@@ -163,12 +163,21 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
 
     // Draw terrain-like background
     const terrainSize = 60;
-    const offsetX = Math.floor(viewport.x / terrainSize) * terrainSize;
-    const offsetY = Math.floor(viewport.y / terrainSize) * terrainSize;
+    
+    // Calculate world bounds that will fill the canvas regardless of zoom level
+    const worldHalfWidth = displayWidth / (2 * viewport.zoom);
+    const worldHalfHeight = displayHeight / (2 * viewport.zoom);
+    const worldMinX = viewport.x - worldHalfWidth;
+    const worldMaxX = viewport.x + worldHalfWidth;
+    const worldMinY = viewport.y - worldHalfHeight;
+    const worldMaxY = viewport.y + worldHalfHeight;
+    
+    const offsetX = Math.floor(worldMinX / terrainSize) * terrainSize;
+    const offsetY = Math.floor(worldMinY / terrainSize) * terrainSize;
     
     // Create a Minecraft-like world background
-    for (let x = offsetX - terrainSize * 3; x < offsetX + displayWidth / viewport.zoom + terrainSize * 3; x += terrainSize) {
-      for (let y = offsetY - terrainSize * 3; y < offsetY + displayHeight / viewport.zoom + terrainSize * 3; y += terrainSize) {
+    for (let x = offsetX - terrainSize; x <= worldMaxX + terrainSize; x += terrainSize) {
+      for (let y = offsetY - terrainSize; y <= worldMaxY + terrainSize; y += terrainSize) {
         // Vary terrain types based on position
         const hash = Math.abs(Math.sin(x * 0.01) * Math.cos(y * 0.01) * 1000);
         const terrainType = Math.floor(hash % 3);
@@ -198,17 +207,20 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     ctx.lineWidth = 1 / viewport.zoom;
     const gridSize = 20;
     
-    for (let x = offsetX - gridSize * 10; x < offsetX + displayWidth / viewport.zoom + gridSize * 10; x += gridSize) {
+    const gridOffsetX = Math.floor(worldMinX / gridSize) * gridSize;
+    const gridOffsetY = Math.floor(worldMinY / gridSize) * gridSize;
+    
+    for (let x = gridOffsetX - gridSize; x <= worldMaxX + gridSize; x += gridSize) {
       ctx.beginPath();
-      ctx.moveTo(x, offsetY - gridSize * 10);
-      ctx.lineTo(x, offsetY + displayHeight / viewport.zoom + gridSize * 10);
+      ctx.moveTo(x, worldMinY - gridSize);
+      ctx.lineTo(x, worldMaxY + gridSize);
       ctx.stroke();
     }
     
-    for (let y = offsetY - gridSize * 10; y < offsetY + displayHeight / viewport.zoom + gridSize * 10; y += gridSize) {
+    for (let y = gridOffsetY - gridSize; y <= worldMaxY + gridSize; y += gridSize) {
       ctx.beginPath();
-      ctx.moveTo(offsetX - gridSize * 10, y);
-      ctx.lineTo(offsetX + displayWidth / viewport.zoom + gridSize * 10, y);
+      ctx.moveTo(worldMinX - gridSize, y);
+      ctx.lineTo(worldMaxX + gridSize, y);
       ctx.stroke();
     }
 
