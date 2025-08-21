@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useRedstoneBench } from './hooks/useRedstoneBench';
-import CommandCenter from './components/Manager/CommandCenter';
-import WorkerDashboard, { BotStatus } from './components/Manager/WorkerDashboard';
+import NewCommandCenter from './components/Manager/NewCommandCenter';
+import UnitSelection from './components/Manager/UnitSelection';
+import { BotStatus } from './components/Manager/WorkerDashboard';
 import BlueprintViewer from './components/Manager/BlueprintViewer';
 import TaskProgressPanel from './components/Manager/TaskProgressPanel';
 import BotCanvas from './components/Manager/BotCanvas';
@@ -104,12 +105,13 @@ interface BottomPanelProps {
   taskStats: any;
   actions: any;
   selectedBot: BotStatus | null;
+  onBotSelect: (bot: BotStatus | null) => void;
   viewport: { x: number; y: number; zoom: number };
   mainCanvasDimensions: { width: number; height: number };
   onMinimapClick: (worldX: number, worldY: number) => void;
 }
 
-const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, taskStats, actions, selectedBot, viewport, mainCanvasDimensions, onMinimapClick }) => {
+const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, taskStats, actions, selectedBot, onBotSelect, viewport, mainCanvasDimensions, onMinimapClick }) => {
   return (
     <div style={{
       background: 'linear-gradient(to bottom, #111 0%, #000 100%)',
@@ -118,30 +120,30 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      height: '300px',
+      height: '450px',
       flexShrink: 0, // Critical: prevents bottom panel from shrinking
-      minHeight: '300px' // Ensures minimum height is maintained
+      minHeight: '450px' // Ensures minimum height is maintained
     }}>
-      {/* Left - Worker Dashboard (Left Aligned) */}
+      {/* Left - Unit Selection (Compact) */}
       <div style={{ 
-        width: '320px',
         flexShrink: 0
       }}>
-        <WorkerDashboard
+        <UnitSelection
           bots={bots}
-          onQueryBot={actions.queryBot}
           selectedBot={selectedBot}
+          onBotSelect={onBotSelect}
         />
       </div>
 
-      {/* Center - Command Center (Center Aligned) */}
+      {/* Center - New Command Center (Wide, includes unit info + commands + options) */}
       <div style={{ 
-        width: '400px',
-        flexShrink: 0,
-        display: 'flex',
-        justifyContent: 'center'
+        flex: 1,
+        minWidth: '800px',
+        maxWidth: '1200px',
+        margin: '0 16px'
       }}>
-        <CommandCenter
+        <NewCommandCenter
+          selectedBot={selectedBot}
           availableBots={availableBots}
           onCommandSent={actions.sendCommand}
         />
@@ -313,7 +315,7 @@ function App() {
         </div>
       </div>
 
-      {/* Bottom Panel - Worker Dashboard, Commands, Minimap */}
+      {/* Bottom Panel - Unit Selection, Command Center, Minimap */}
       <BottomPanel 
         bots={bots}
         availableBots={availableBots}
@@ -321,6 +323,7 @@ function App() {
         taskStats={taskStats}
         actions={actions}
         selectedBot={selectedBot}
+        onBotSelect={setSelectedBot}
         viewport={viewport}
         mainCanvasDimensions={mainCanvasDimensions}
         onMinimapClick={handleMinimapClick}
