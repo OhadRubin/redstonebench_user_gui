@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import Panel from '../UI/Panel';
 
 export interface BotEvent {
   id: string;
@@ -111,13 +110,28 @@ const EventLog: React.FC<EventLogProps> = ({ events, onClearLog }) => {
   }, {} as { [key: string]: number });
 
   return (
-    <Panel 
-      title="📋 Event Log" 
-      bottom="20px" 
-      right="20px" 
-      minWidth="400px"
-      isMinimizable={true}
-    >
+    <div style={{
+      background: '#1a1a1a',
+      border: '2px solid #00ffff',
+      borderRadius: '8px',
+      padding: '12px',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      {/* Header */}
+      <div style={{
+        fontSize: '14px',
+        fontWeight: 'bold',
+        color: '#00ffff',
+        marginBottom: '12px',
+        textAlign: 'center',
+        borderBottom: '1px solid #333',
+        paddingBottom: '8px'
+      }}>
+        📋 Event Log
+      </div>
+      
       <div style={headerStyle}>
         <div style={statsStyle}>
           <span>Total: {events.length}</span>
@@ -136,7 +150,7 @@ const EventLog: React.FC<EventLogProps> = ({ events, onClearLog }) => {
       </div>
 
       <div style={{ 
-        maxHeight: '200px', 
+        flex: 1, 
         overflowY: 'auto',
         border: '1px solid #333',
         borderRadius: '3px',
@@ -206,7 +220,7 @@ const EventLog: React.FC<EventLogProps> = ({ events, onClearLog }) => {
         )}
         <div ref={logEndRef} />
       </div>
-    </Panel>
+    </div>
   );
 };
 

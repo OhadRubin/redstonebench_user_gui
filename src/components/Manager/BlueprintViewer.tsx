@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import Panel from '../UI/Panel';
 
 interface BlueprintViewerProps {
   completedBlocks: Set<string>; // Set of "x,y,z" coordinates that are completed
   onRegionSelect: (region: string) => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-const BlueprintViewer: React.FC<BlueprintViewerProps> = ({ completedBlocks, onRegionSelect }) => {
+const BlueprintViewer: React.FC<BlueprintViewerProps> = ({ completedBlocks, onRegionSelect, isOpen, onClose }) => {
   const [selectedLayer, setSelectedLayer] = useState<number>(1);
 
   // Sugar Cane Farm Blueprint from the RedstoneBench document
@@ -176,14 +177,75 @@ const BlueprintViewer: React.FC<BlueprintViewerProps> = ({ completedBlocks, onRe
     onRegionSelect(region);
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Panel 
-      title="📐 Blueprint Viewer" 
-      top="20px" 
-      left="720px" 
-      minWidth="300px"
-      isMinimizable={true}
-    >
+    <>
+      {/* Backdrop */}
+      <div 
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 1000
+        }}
+        onClick={onClose}
+      />
+      
+      {/* Blueprint Modal */}
+      <div style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        background: 'rgba(26, 26, 26, 0.98)',
+        border: '2px solid #00ffff',
+        borderRadius: '12px',
+        padding: '20px',
+        maxWidth: '600px',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxShadow: '0 0 30px rgba(0, 255, 255, 0.3)',
+        zIndex: 1001
+      }}>
+        {/* Header with close button */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px',
+          borderBottom: '2px solid #00ffff',
+          paddingBottom: '8px'
+        }}>
+          <div style={{
+            fontSize: '18px',
+            fontWeight: 'bold',
+            color: '#00ffff'
+          }}>
+            📐 Blueprint Viewer
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: '#333',
+              color: '#fff',
+              border: '1px solid #555',
+              borderRadius: '4px',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#555'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#333'}
+          >
+            ✕
+          </button>
+        </div>
+      
       <div style={{ fontSize: '11px' }}>
         <div style={statsStyle}>
           Progress: {completedCount}/{totalBlocks} blocks ({completionPercentage.toFixed(1)}%)
@@ -296,8 +358,9 @@ const BlueprintViewer: React.FC<BlueprintViewerProps> = ({ completedBlocks, onRe
             ))}
           </div>
         </div>
+        </div>
       </div>
-    </Panel>
+    </>
   );
 };
 

@@ -1,5 +1,4 @@
 import React from 'react';
-import Panel from '../UI/Panel';
 
 export interface BotStatus {
   id: number;
@@ -99,14 +98,29 @@ const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot }) =
   });
 
   return (
-    <Panel 
-      title="🤖 Worker Status Dashboard" 
-      top="20px" 
-      left="340px" 
-      minWidth="350px"
-      isMinimizable={true}
-    >
-      <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+    <div style={{
+      background: '#1a1a1a',
+      border: '2px solid #00ffff',
+      borderRadius: '8px',
+      padding: '12px',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      {/* Header */}
+      <div style={{
+        fontSize: '14px',
+        fontWeight: 'bold',
+        color: '#00ffff',
+        marginBottom: '12px',
+        textAlign: 'center',
+        borderBottom: '1px solid #333',
+        paddingBottom: '8px'
+      }}>
+        🤖 Worker Status Dashboard
+      </div>
+      
+      <div style={{ flex: 1, overflowY: 'auto' }}>
         {bots.map(bot => (
           <div key={bot.id} style={botCardStyle}>
             <div style={headerStyle}>
@@ -196,7 +210,7 @@ const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot }) =
           </div>
         )}
       </div>
-    </Panel>
+    </div>
   );
 };
 

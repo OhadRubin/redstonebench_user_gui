@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import Panel from '../UI/Panel';
 
 interface CommandCenterProps {
   onCommandSent: (command: any) => void;
@@ -286,14 +285,29 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ onCommandSent, availableB
   };
 
   return (
-    <Panel 
-      title="🎮 Command Center" 
-      top="20px" 
-      right="20px" 
-      minWidth="300px"
-      isMinimizable={true}
-    >
-      <div style={{ fontSize: '12px' }}>
+    <div style={{
+      background: '#1a1a1a',
+      border: '2px solid #00ffff',
+      borderRadius: '8px',
+      padding: '12px',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      {/* Header */}
+      <div style={{
+        fontSize: '14px',
+        fontWeight: 'bold',
+        color: '#00ffff',
+        marginBottom: '12px',
+        textAlign: 'center',
+        borderBottom: '1px solid #333',
+        paddingBottom: '8px'
+      }}>
+        🎮 Command Center
+      </div>
+      
+      <div style={{ fontSize: '12px', flex: 1, overflowY: 'auto' }}>
         <div style={{ marginBottom: '15px' }}>
           <label style={{ fontWeight: 'bold', color: '#00ffff' }}>Select Bot:</label>
           <select 
@@ -340,7 +354,7 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ onCommandSent, availableB
           Send Command to Bot {selectedBot}
         </button>
       </div>
-    </Panel>
+    </div>
   );
 };
 
