@@ -15,3 +15,18 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Ensure root takes full height to avoid vh rounding jitter */
+html, body, #root {
+  height: 100%;
+}
+
+/* Stable viewport height var with dynamic-viewport fallback */
+:root {
+  --app-100vh: 100vh;
+}
+@supports (height: 100dvh) {
+  :root {
+    --app-100vh: 100dvh;
+  }
+}

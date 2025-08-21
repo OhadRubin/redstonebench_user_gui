@@ -22,24 +22,42 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
   const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
   const [mouseWorldPos, setMouseWorldPos] = useState({ x: 0, y: 0 });
 
-  // Sync internal viewport state with prop
+  // Helper compare with small epsilon for floats
+  const sameViewport = (a: {x:number;y:number;zoom:number}, b: {x:number;y:number;zoom:number}) => {
+    const eps = 1e-6;
+    return Math.abs(a.x - b.x) < eps && Math.abs(a.y - b.y) < eps && Math.abs(a.zoom - b.zoom) < eps;
+  };
+
+  // Sync internal viewport state with prop, but only if values changed
   useEffect(() => {
-    if (propViewport) {
+    if (propViewport && !sameViewport(propViewport, viewport)) {
       setViewport(propViewport);
     }
-  }, [propViewport]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propViewport?.x, propViewport?.y, propViewport?.zoom]);
 
-  // Notify parent of viewport changes with canvas dimensions
+  // Notify parent of viewport changes with canvas dimensions (only when changed)
+  const lastSentRef = useRef<{x:number;y:number;zoom:number;width:number;height:number}|null>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas && onViewportChange) {
-      onViewportChange({
-        x: viewport.x,
-        y: viewport.y,
-        zoom: viewport.zoom,
-        width: canvas.width,
-        height: canvas.height
-      });
+    if (!canvas || !onViewportChange) return;
+    const payload = {
+      x: viewport.x,
+      y: viewport.y,
+      zoom: viewport.zoom,
+      width: canvas.width,
+      height: canvas.height
+    };
+    const last = lastSentRef.current;
+    const changed = !last ||
+      Math.abs(last.x - payload.x) > 1e-6 ||
+      Math.abs(last.y - payload.y) > 1e-6 ||
+      Math.abs(last.zoom - payload.zoom) > 1e-6 ||
+      last.width !== payload.width ||
+      last.height !== payload.height;
+    if (changed) {
+      lastSentRef.current = payload;
+      onViewportChange(payload);
     }
   }, [viewport, onViewportChange]);
 
@@ -50,9 +68,9 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     if (!canvas || !container) return;
 
     const updateCanvasSize = () => {
-      const rect = container.getBoundingClientRect();
-      const newWidth = Math.floor(rect.width);
-      const newHeight = Math.floor(rect.height);
+      // Use client dimensions (content box) to avoid border-included rounding
+      const newWidth = Math.round(container.clientWidth);
+      const newHeight = Math.round(container.clientHeight);
       
       // Only update if size actually changed to prevent unnecessary re-renders
       if (canvas.width !== newWidth || canvas.height !== newHeight) {
@@ -306,7 +324,8 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
         borderRadius: '8px',
         overflow: 'hidden',
         minHeight: 0, // Allow container to shrink below content size
-        maxHeight: '100%' // Prevent container from growing beyond parent
+        maxHeight: '100%', // Prevent container from growing beyond parent
+        contain: 'layout paint size' // Isolate layout to prevent upstream jitter
       }}
     >
       {/* Bot count and viewport info */}

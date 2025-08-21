@@ -202,8 +202,16 @@ function App() {
   const availableBots = bots.map(bot => bot.id);
 
   const handleViewportChange = (newViewport: { x: number; y: number; zoom: number; width: number; height: number }) => {
-    setViewport({ x: newViewport.x, y: newViewport.y, zoom: newViewport.zoom });
-    setMainCanvasDimensions({ width: newViewport.width, height: newViewport.height });
+    setViewport(prev => (
+      prev.x !== newViewport.x || prev.y !== newViewport.y || prev.zoom !== newViewport.zoom
+        ? { x: newViewport.x, y: newViewport.y, zoom: newViewport.zoom }
+        : prev
+    ));
+    setMainCanvasDimensions(prev => (
+      prev.width !== newViewport.width || prev.height !== newViewport.height
+        ? { width: newViewport.width, height: newViewport.height }
+        : prev
+    ));
   };
 
   const handleMinimapClick = (worldX: number, worldY: number) => {
@@ -225,7 +233,7 @@ function App() {
 
   return (
     <div style={{
-      height: '100vh',
+      height: 'var(--app-100vh, 100vh)',
       display: 'flex',
       flexDirection: 'column',
       background: '#0d1117',
