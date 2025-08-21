@@ -109,9 +109,13 @@ interface BottomPanelProps {
   viewport: { x: number; y: number; zoom: number };
   mainCanvasDimensions: { width: number; height: number };
   onMinimapClick: (worldX: number, worldY: number) => void;
+  selectedCommand: string;
+  onCommandChange: (command: string) => void;
+  moveTarget: { x: number; y: number; z: number } | null;
+  onMoveTargetChange: (target: { x: number; y: number; z: number } | null) => void;
 }
 
-const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, taskStats, actions, selectedBot, onBotSelect, viewport, mainCanvasDimensions, onMinimapClick }) => {
+const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, taskStats, actions, selectedBot, onBotSelect, viewport, mainCanvasDimensions, onMinimapClick, selectedCommand, onCommandChange, moveTarget, onMoveTargetChange }) => {
   return (
     <div style={{
       background: 'linear-gradient(to bottom, #111 0%, #000 100%)',
@@ -146,6 +150,10 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
           selectedBot={selectedBot}
           availableBots={availableBots}
           onCommandSent={actions.sendCommand}
+          selectedCommand={selectedCommand}
+          onCommandChange={onCommandChange}
+          moveTarget={moveTarget}
+          onMoveTargetChange={onMoveTargetChange}
         />
       </div>
 
@@ -234,6 +242,10 @@ function App() {
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   const [mainCanvasDimensions, setMainCanvasDimensions] = useState({ width: 800, height: 600 });
 
+  // Click-to-move state
+  const [selectedCommand, setSelectedCommand] = useState<string>('gather');
+  const [moveTarget, setMoveTarget] = useState<{ x: number; y: number; z: number } | null>(null);
+
   const availableBots = bots.map(bot => bot.id);
 
   const handleViewportChange = (newViewport: { x: number; y: number; zoom: number; width: number; height: number }) => {
@@ -255,6 +267,15 @@ function App() {
       x: worldX,
       y: worldY
     }));
+  };
+
+  const handleCanvasClick = (worldX: number, worldY: number) => {
+    if (selectedCommand === 'move_to') {
+      // Convert world coordinates to game coordinates (divide by 5)
+      const gameX = Math.round(worldX / 5);
+      const gameZ = Math.round(worldY / 5);
+      setMoveTarget({ x: gameX, y: 64, z: gameZ });
+    }
   };
 
   // Debug logs (commented out to reduce console spam)
@@ -298,6 +319,9 @@ function App() {
           onBotSelect={handleBotSelection}
           viewport={viewport}
           onViewportChange={handleViewportChange}
+          selectedCommand={selectedCommand}
+          moveTarget={moveTarget}
+          onCanvasClick={handleCanvasClick}
         />
         
         {/* Control buttons overlay */}
@@ -345,6 +369,10 @@ function App() {
         viewport={viewport}
         mainCanvasDimensions={mainCanvasDimensions}
         onMinimapClick={handleMinimapClick}
+        selectedCommand={selectedCommand}
+        onCommandChange={setSelectedCommand}
+        moveTarget={moveTarget}
+        onMoveTargetChange={setMoveTarget}
       />
 
       {/* Contextual Blueprint Viewer */}

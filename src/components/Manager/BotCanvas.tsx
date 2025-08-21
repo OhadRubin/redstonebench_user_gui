@@ -10,9 +10,12 @@ interface BotCanvasProps {
   onBotSelect?: (bot: BotStatus) => void;
   viewport?: { x: number; y: number; zoom: number };
   onViewportChange?: (viewport: { x: number; y: number; zoom: number; width: number; height: number }) => void;
+  selectedCommand?: string;
+  moveTarget?: { x: number; y: number; z: number } | null;
+  onCanvasClick?: (worldX: number, worldY: number) => void;
 }
 
-const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, viewport: propViewport, onViewportChange }) => {
+const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, viewport: propViewport, onViewportChange, selectedCommand, moveTarget, onCanvasClick }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -280,6 +283,30 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
       }
     });
 
+    // Draw move target crosshair
+    if (selectedCommand === 'move_to' && moveTarget) {
+      const targetWorldX = moveTarget.x * 5; // Convert game coordinates to world coordinates
+      const targetWorldZ = moveTarget.z * 5;
+      
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 3 / viewport.zoom;
+      const crosshairSize = 15 / viewport.zoom;
+      
+      // Draw crosshair
+      ctx.beginPath();
+      ctx.moveTo(targetWorldX - crosshairSize, targetWorldZ);
+      ctx.lineTo(targetWorldX + crosshairSize, targetWorldZ);
+      ctx.moveTo(targetWorldX, targetWorldZ - crosshairSize);
+      ctx.lineTo(targetWorldX, targetWorldZ + crosshairSize);
+      ctx.stroke();
+      
+      // Draw center dot
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.arc(targetWorldX, targetWorldZ, 2 / viewport.zoom, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
     ctx.restore();
 
     // Draw viewport coordinates only (not mouse coordinates to prevent re-renders)
@@ -288,7 +315,7 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     ctx.textAlign = 'left';
     ctx.fillText(`Viewport: x:${Math.round(viewport.x)}, y:${Math.round(viewport.y)}, zoom:${viewport.zoom.toFixed(2)}`, 10, 20);
 
-  }, [bots, selectedBot, viewport]); // Removed mousePos from dependencies to prevent jitter
+  }, [bots, selectedBot, viewport, selectedCommand, moveTarget]); // Include move-related props for crosshair updates
 
   // Convert screen coordinates to world coordinates
   const screenToWorld = (screenX: number, screenY: number) => {
@@ -328,6 +355,9 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
       
       if (clickedBot && onBotSelect) {
         onBotSelect(clickedBot);
+      } else if (selectedCommand === 'move_to' && onCanvasClick) {
+        // Handle move target selection
+        onCanvasClick(worldPos.x, worldPos.y);
       } else {
         // Start panning
         setIsPanning(true);
@@ -471,7 +501,7 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
         style={{
           width: '100%',
           height: '100%',
-          cursor: isPanning ? 'grabbing' : 'grab'
+          cursor: isPanning ? 'grabbing' : (selectedCommand === 'move_to' ? 'crosshair' : 'grab')
         }}
       />
 

@@ -5,10 +5,13 @@ interface NewCommandCenterProps {
   selectedBot: BotStatus | null;
   availableBots: string[];
   onCommandSent: (command: any) => void;
+  selectedCommand: string;
+  onCommandChange: (command: string) => void;
+  moveTarget: { x: number; y: number; z: number } | null;
+  onMoveTargetChange: (target: { x: number; y: number; z: number } | null) => void;
 }
 
-const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availableBots, onCommandSent }) => {
-  const [selectedCommand, setSelectedCommand] = useState<string>('gather');
+const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availableBots, onCommandSent, selectedCommand, onCommandChange, moveTarget, onMoveTargetChange }) => {
 
   // Form states for different commands
   const [gatherForm, setGatherForm] = useState({
@@ -39,6 +42,23 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
   });
 
   const [waitTime, setWaitTime] = useState<number>(5);
+
+  // Sync moveForm with moveTarget prop
+  useEffect(() => {
+    if (moveTarget) {
+      setMoveForm({
+        x: moveTarget.x,
+        y: moveTarget.y,
+        z: moveTarget.z
+      });
+    }
+  }, [moveTarget]);
+
+  // Handle manual move form changes
+  const handleMoveFormChange = (newMoveForm: { x: number; y: number; z: number }) => {
+    setMoveForm(newMoveForm);
+    onMoveTargetChange(newMoveForm);
+  };
 
   const commands = [
     { id: 'gather', icon: '⛏️', label: 'Gather', color: '#ff9500' },
@@ -257,7 +277,7 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
           {commands.map(cmd => (
             <button
               key={cmd.id}
-              onClick={() => setSelectedCommand(cmd.id)}
+              onClick={() => onCommandChange(cmd.id)}
               disabled={!selectedBot}
               style={{
                 background: selectedCommand === cmd.id 
@@ -414,7 +434,7 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
                 type="number"
                 style={inputStyle}
                 value={moveForm.x}
-                onChange={(e) => setMoveForm({...moveForm, x: parseInt(e.target.value)})}
+                onChange={(e) => handleMoveFormChange({...moveForm, x: parseInt(e.target.value)})}
               />
             </div>
             
@@ -424,7 +444,7 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
                 type="number"
                 style={inputStyle}
                 value={moveForm.y}
-                onChange={(e) => setMoveForm({...moveForm, y: parseInt(e.target.value)})}
+                onChange={(e) => handleMoveFormChange({...moveForm, y: parseInt(e.target.value)})}
               />
             </div>
             
@@ -434,7 +454,7 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
                 type="number"
                 style={inputStyle}
                 value={moveForm.z}
-                onChange={(e) => setMoveForm({...moveForm, z: parseInt(e.target.value)})}
+                onChange={(e) => handleMoveFormChange({...moveForm, z: parseInt(e.target.value)})}
               />
             </div>
           </div>
