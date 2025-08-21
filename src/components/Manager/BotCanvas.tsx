@@ -41,15 +41,20 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
   const rafIdRef = useRef<number | null>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !onViewportChange) return;
+    const container = containerRef.current;
+    if (!canvas || !container || !onViewportChange) return;
+
+    // Use CSS pixel dimensions for reporting to parent (not internal DPR-scaled size)
+    const displayWidth = Math.round(container.clientWidth);
+    const displayHeight = Math.round(container.clientHeight);
 
     // Quantize values to avoid subpixel churn
     const payload = {
       x: Math.round(viewport.x * 100) / 100, // 0.01 precision
       y: Math.round(viewport.y * 100) / 100,
       zoom: Math.round(viewport.zoom * 10000) / 10000, // 4 dp for zoom
-      width: canvas.width,
-      height: canvas.height
+      width: displayWidth,
+      height: displayHeight
     };
 
     const sendIfChanged = () => {
@@ -87,14 +92,32 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     if (!canvas || !container) return;
 
     const updateCanvasSize = () => {
+      // Get device pixel ratio for high-DPI display support
+      const dpr = window.devicePixelRatio || 1;
+      
       // Use client dimensions (content box) to avoid border-included rounding
-      const newWidth = Math.round(container.clientWidth);
-      const newHeight = Math.round(container.clientHeight);
+      const displayWidth = Math.round(container.clientWidth);
+      const displayHeight = Math.round(container.clientHeight);
+      
+      // Calculate internal canvas dimensions with device pixel ratio scaling
+      const canvasWidth = Math.round(displayWidth * dpr);
+      const canvasHeight = Math.round(displayHeight * dpr);
       
       // Only update if size actually changed to prevent unnecessary re-renders
-      if (canvas.width !== newWidth || canvas.height !== newHeight) {
-        canvas.width = newWidth;
-        canvas.height = newHeight;
+      if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
+        // Set internal canvas dimensions (actual rendering surface)
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        
+        // Set CSS dimensions (display size)
+        canvas.style.width = displayWidth + 'px';
+        canvas.style.height = displayHeight + 'px';
+        
+        // Normalize transform so 1 unit = 1 CSS pixel
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
       }
     };
 
@@ -116,17 +139,25 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
   // Separate useEffect for drawing logic - no mousePos dependency
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Use canvas rect for exact CSS pixel size
+    const rect = canvas.getBoundingClientRect();
+    const displayWidth = rect.width;
+    const displayHeight = rect.height;
 
-    // Apply viewport transformation
+    // Ensure base transform is normalized per frame and clear in CSS pixels
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, displayWidth, displayHeight);
+
+    // Apply viewport transformation using display dimensions (center-based)
     ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.translate(displayWidth / 2, displayHeight / 2);
     ctx.scale(viewport.zoom, viewport.zoom);
     ctx.translate(-viewport.x, -viewport.y);
 
@@ -136,8 +167,8 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     const offsetY = Math.floor(viewport.y / terrainSize) * terrainSize;
     
     // Create a Minecraft-like world background
-    for (let x = offsetX - terrainSize * 3; x < offsetX + canvas.width / viewport.zoom + terrainSize * 3; x += terrainSize) {
-      for (let y = offsetY - terrainSize * 3; y < offsetY + canvas.height / viewport.zoom + terrainSize * 3; y += terrainSize) {
+    for (let x = offsetX - terrainSize * 3; x < offsetX + displayWidth / viewport.zoom + terrainSize * 3; x += terrainSize) {
+      for (let y = offsetY - terrainSize * 3; y < offsetY + displayHeight / viewport.zoom + terrainSize * 3; y += terrainSize) {
         // Vary terrain types based on position
         const hash = Math.abs(Math.sin(x * 0.01) * Math.cos(y * 0.01) * 1000);
         const terrainType = Math.floor(hash % 3);
@@ -167,17 +198,17 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     ctx.lineWidth = 1 / viewport.zoom;
     const gridSize = 20;
     
-    for (let x = offsetX - gridSize * 10; x < offsetX + canvas.width / viewport.zoom + gridSize * 10; x += gridSize) {
+    for (let x = offsetX - gridSize * 10; x < offsetX + displayWidth / viewport.zoom + gridSize * 10; x += gridSize) {
       ctx.beginPath();
       ctx.moveTo(x, offsetY - gridSize * 10);
-      ctx.lineTo(x, offsetY + canvas.height / viewport.zoom + gridSize * 10);
+      ctx.lineTo(x, offsetY + displayHeight / viewport.zoom + gridSize * 10);
       ctx.stroke();
     }
     
-    for (let y = offsetY - gridSize * 10; y < offsetY + canvas.height / viewport.zoom + gridSize * 10; y += gridSize) {
+    for (let y = offsetY - gridSize * 10; y < offsetY + displayHeight / viewport.zoom + gridSize * 10; y += gridSize) {
       ctx.beginPath();
       ctx.moveTo(offsetX - gridSize * 10, y);
-      ctx.lineTo(offsetX + canvas.width / viewport.zoom + gridSize * 10, y);
+      ctx.lineTo(offsetX + displayWidth / viewport.zoom + gridSize * 10, y);
       ctx.stroke();
     }
 
@@ -252,8 +283,10 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     if (!canvas) return { x: 0, y: 0 };
     
     const rect = canvas.getBoundingClientRect();
-    const canvasX = screenX - rect.left - canvas.width / 2;
-    const canvasY = screenY - rect.top - canvas.height / 2;
+    const displayWidth = rect.width;
+    const displayHeight = rect.height;
+    const canvasX = screenX - rect.left - displayWidth / 2;
+    const canvasY = screenY - rect.top - displayHeight / 2;
     
     return {
       x: viewport.x + canvasX / viewport.zoom,
