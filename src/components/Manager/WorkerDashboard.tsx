@@ -1,7 +1,8 @@
 import React from 'react';
 
 export interface BotStatus {
-  id: string; // Changed to string to match server format (e.g., "worker_0")
+  id: string; // Bot ID string (e.g., "worker_0") - for display and compatibility
+  index: number; // Numeric worker index - for Protocol V2 communication
   position: { x: number; y: number; z: number };
   inventory: { [item: string]: number };
   currentJob: string;

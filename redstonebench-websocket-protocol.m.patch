@@ -1,0 +1,181 @@
+diff --git a/docs/redstonebench-websocket-protocol.md b/docs/redstonebench-websocket-protocol.md
+index 0a2262a..b1bb1a8 100644
+--- a/docs/redstonebench-websocket-protocol.md
++++ b/docs/redstonebench-websocket-protocol.md
+@@ -181,37 +181,58 @@ Alternative formats:
+ ### Connection Messages
+ 
+ #### Connection Established
++Protocol V2 (current, breaking change): `workers_available` is an array of objects `{ index, botId }` and `server_info` includes `protocol_version` and `aliases`.
++
+ ```json
+ {
+   "type": "connection_established",
+   "client_id": "client_1703123456789_abc123def",
+-  "workers_available": ["worker_0", "worker_1"],
++  "workers_available": [
++    { "index": 0, "botId": "worker_0" },
++    { "index": 1, "botId": "worker_1" }
++  ],
+   "server_info": {
+     "version": "1.0.0",
+     "max_workers": 5,
+-    "capabilities": ["move_to", "gather", "craft", "place_block", "query_status"]
++    "protocol_version": 2,
++    "capabilities": ["move_to", "gather", "craft", "place_block", "query_status"],
++    "aliases": { "place_blueprint": "place_block" }
+   }
+ }
+ ```
+ 
+-### Command Response Messages
++Legacy (Protocol V1, deprecated): `workers_available` was an array of strings. Clients must migrate to the V2 shape above.
+ 
+-#### Success Response
+ ```json
+ {
+-  "status": "success",
+-  "job_id": "gui_job_1",
+-  "message": "Command processed"
++  "type": "connection_established",
++  "workers_available": ["worker_0", "worker_1"],
++  "server_info": { "version": "1.0.0", "max_workers": 5 }
+ }
+ ```
+ 
+-#### Error Response
++### Command/Control Responses
++
++Protocol V2 uses two status classes:
++- Command acknowledgments: `accepted | rejected`
++- Control operations (start/stop/reset): `success | error`
++
++Examples:
++
+ ```json
+-{
+-  "status": "error",
+-  "job_id": "gui_job_1",
+-  "message": "Failed to translate command to M2 format"
+-}
++{ "status": "accepted", "data": { "job_id": "gui_job_1" } }
++```
++
++```json
++{ "status": "rejected", "data": { "job_id": "gui_job_1" }, "message": "Invalid command format" }
++```
++
++```json
++{ "status": "success", "message": "Task started" }
++```
++
++```json
++{ "status": "error", "message": "Task already active" }
+ ```
+ 
+ ### Task Event Messages
+@@ -265,7 +286,7 @@ Alternative formats:
+   "data": {
+     "workers": [
+       {
+-        "id": "worker_0",
++        "id": 0,
+         "position": {"x": 100, "y": 64, "z": 200},
+         "inventory": {
+           "oak_log": 3,
+@@ -291,13 +312,10 @@ Alternative formats:
+ ```json
+ {
+   "type": "start",
+-  "bot_id": "worker_0",
++  "bot_id": 0,
+   "job_id": "move_123",
+   "timestamp": 1703123456789,
+-  "command": {
+-    "cmd": "move_to",
+-    "parameters": {"target": {"x": 100, "y": 64, "z": 200}}
+-  }
++  "command": "move_to"
+ }
+ ```
+ 
+@@ -305,7 +323,7 @@ Alternative formats:
+ ```json
+ {
+   "type": "progress",
+-  "bot_id": "worker_0",
++  "bot_id": 0,
+   "job_id": "gather_001",
+   "timestamp": 1703123456889,
+   "progress": 0.6,
+@@ -318,7 +336,7 @@ Alternative formats:
+ ```json
+ {
+   "type": "complete",
+-  "bot_id": "worker_0",
++  "bot_id": 0,
+   "job_id": "gather_001",
+   "timestamp": 1703123456989,
+   "result": {
+@@ -335,7 +353,7 @@ Alternative formats:
+ ```json
+ {
+   "type": "failed",
+-  "bot_id": "worker_0",
++  "bot_id": 0,
+   "job_id": "craft_001",
+   "timestamp": 1703123457089,
+   "error": {
+@@ -375,7 +393,7 @@ interface BlockDefinition {
+ }
+ 
+ interface Worker {
+-  id: string;
++  id: number; // stable worker index
+   position: Position;
+   inventory: Record<string, number>;
+   status: 'IDLE' | 'BUSY';
+@@ -387,7 +405,9 @@ interface Worker {
+ interface ServerInfo {
+   version: string;
+   max_workers: number;
++  protocol_version: 2;
+   capabilities: string[];
++  aliases: Record<string, string>;
+ }
+ 
+ interface ClientMessage {
+@@ -409,11 +429,25 @@ interface ServerResponse {
+ 
+ interface WorkerEvent {
+   type: 'start' | 'progress' | 'complete' | 'failed';
+-  bot_id: string;
++  bot_id: number; // stable worker index
+   job_id: string;
+   timestamp: number;
+   [key: string]: any; // event-specific fields
+ }
++
++## 8. Migration Notes (Protocol V1 → V2)
++
++- workers_available shape has changed from `string[]` to `{ index, botId }[]`.
++  - React error “Objects are not valid as a React child … {index, botId}” indicates the client was rendering objects directly. Fix by mapping to a string (e.g., `workers_available.map(w => w.botId)`) or handling the object shape in components.
++- Command acks vs control statuses are now distinct:
++  - Command acks: `accepted | rejected`
++  - Control responses (start/stop/reset): `success | error`
++- Aliases are explicit: `place_blueprint` → `place_block`.
++- Bot selection:
++  - Clients may send `bot_id` as the `botId` string from the handshake or as the numeric `index`. The server normalizes to internal worker indices.
++- Event sampling:
++  - EventBus applies PROGRESS sampling. Some events may be filtered from logs; terminal events are never sampled.
++
+ ```
+ 
+ ## 6. Connection Behavior
+@@ -712,4 +746,4 @@ WebSocket connection to 'ws://localhost:8080/' failed
+ 1. Query status to identify stuck workers
+ 2. Send `reset_task` to free resources
+ 3. Reinitialize with fresh commands
+-4. Monitor worker events for proper execution
+\ No newline at end of file
++4. Monitor worker events for proper execution

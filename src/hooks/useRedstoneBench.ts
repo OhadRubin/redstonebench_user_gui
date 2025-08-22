@@ -57,7 +57,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     }
   }, []);
 
-  const startStatusPolling = useCallback((botIds: string[]) => {
+  const startStatusPolling = useCallback((botIds: (string | number)[]) => {
     // Clear any existing polling
     if (statusPollInterval.current) {
       clearInterval(statusPollInterval.current);
@@ -114,15 +114,27 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
           if (data.type === 'connection_established') {
             // Handle connection_established message with workers_available IDs
             if (data.workers_available && Array.isArray(data.workers_available)) {
-              const newBots: BotStatus[] = data.workers_available.map((botId: string) => ({
-                id: botId, // Keep as string (e.g., "worker_0")
-                position: { x: 0, y: 0, z: 64 }, // x=x, y=z (for 2D view), z=y
-                inventory: {},
-                currentJob: 'Querying status...',
-                status: 'IDLE' as const,
-                lastActivity: 'Connected',
-                utilization: 0
-              }));
+              // Protocol V2: workers_available is array of {index, botId} objects
+              // Protocol V1: workers_available is array of botId strings
+              const isProtocolV2 = data.workers_available.length > 0 && 
+                                   typeof data.workers_available[0] === 'object' && 
+                                   'index' in data.workers_available[0];
+              
+              const newBots: BotStatus[] = data.workers_available.map((worker: any) => {
+                const botId = isProtocolV2 ? worker.botId : worker;
+                const index = isProtocolV2 ? worker.index : parseInt(botId.split('_')[1]) || 0;
+                
+                return {
+                  id: botId, // Keep as string (e.g., "worker_0") for display
+                  index: index, // Numeric index for Protocol V2 communication
+                  position: { x: 0, y: 0, z: 64 }, // x=x, y=z (for 2D view), z=y
+                  inventory: {},
+                  currentJob: 'Querying status...',
+                  status: 'IDLE' as const,
+                  lastActivity: 'Connected',
+                  utilization: 0
+                };
+              });
 
               setState(prev => ({
                 ...prev,
@@ -130,14 +142,30 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
                 taskStats: { ...prev.taskStats, workerCount: newBots.length }
               }));
 
-              // Start polling for bot status updates
-              startStatusPolling(data.workers_available);
+              // Log protocol version detected
+              const protocolVersion = data.server_info?.protocol_version || (isProtocolV2 ? 2 : 1);
+              console.log(`🔗 Protocol V${protocolVersion} detected`, {
+                protocolVersion,
+                aliases: data.server_info?.aliases,
+                capabilities: data.server_info?.capabilities
+              });
+
+              // Start polling for bot status updates with proper format
+              const botIdentifiers = isProtocolV2 ? 
+                data.workers_available.map((w: any) => w.index) : 
+                data.workers_available;
+              startStatusPolling(botIdentifiers);
             }
           } else if (data.type === 'bot_status_update') {
             setState(prev => ({
               ...prev,
-              bots: prev.bots.map(bot => 
-                bot.id === data.bot_id ? {
+              bots: prev.bots.map(bot => {
+                // Protocol V2 uses numeric bot_id, V1 uses string bot_id
+                const matchesBot = typeof data.bot_id === 'number' 
+                  ? bot.index === data.bot_id 
+                  : bot.id === data.bot_id;
+                
+                return matchesBot ? {
                   ...bot,
                   position: data.position || bot.position,
                   inventory: data.inventory || bot.inventory,
@@ -145,8 +173,8 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
                   status: data.status || bot.status,
                   lastActivity: data.last_activity || bot.lastActivity,
                   utilization: data.utilization || bot.utilization
-                } : bot
-              )
+                } : bot;
+              })
             }));
           } else if (data.type === 'start' || data.type === 'progress' || data.type === 'complete' || data.type === 'failed') {
             // Handle server's worker event format (lowercase types)
@@ -158,21 +186,32 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
             };
 
             const generateEventMessage = (eventData: any) => {
-              const botId = eventData.bot_id;
+              // Protocol V2 uses numeric bot_id, find display name
+              const bot = state.bots.find(b => 
+                typeof eventData.bot_id === 'number' ? b.index === eventData.bot_id : b.id === eventData.bot_id
+              );
+              const botDisplayName = bot ? bot.id : `Worker ${eventData.bot_id}`;
               const jobId = eventData.job_id;
+              
               switch (eventData.type) {
-                case 'start': return `Worker ${botId} started job ${jobId}`;
-                case 'progress': return `Worker ${botId} making progress on ${jobId}`;
-                case 'complete': return `Worker ${botId} completed job ${jobId}`;
-                case 'failed': return `Worker ${botId} failed job ${jobId}: ${eventData.error?.message || 'Unknown error'}`;
-                default: return `Worker ${botId} event: ${eventData.type}`;
+                case 'start': {
+                  // Protocol V2: command is string; V1: command is object with cmd property
+                  const cmdName = typeof eventData.command === 'string' 
+                    ? eventData.command 
+                    : eventData.command?.cmd || 'unknown';
+                  return `${botDisplayName} started ${cmdName} (${jobId})`;
+                }
+                case 'progress': return `${botDisplayName} making progress on ${jobId}`;
+                case 'complete': return `${botDisplayName} completed ${jobId}`;
+                case 'failed': return `${botDisplayName} failed ${jobId}: ${eventData.error?.message || 'Unknown error'}`;
+                default: return `${botDisplayName} event: ${eventData.type}`;
               }
             };
 
             const newEvent: BotEvent = {
               id: (++eventIdCounter.current).toString(),
               timestamp: data.timestamp || Date.now(),
-              botId: data.bot_id,
+              botId: typeof data.bot_id === 'number' ? data.bot_id.toString() : data.bot_id,
               type: eventTypeMap[data.type] || data.type.toUpperCase(),
               jobId: data.job_id,
               message: data.message || generateEventMessage(data),
@@ -212,7 +251,10 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
             setState(prev => ({
               ...prev,
               bots: prev.bots.map(bot => {
-                const serverWorker = workers.find((w: any) => w.id === bot.id);
+                // Protocol V2 uses numeric worker.id, V1 uses string worker.id
+                const serverWorker = workers.find((w: any) => 
+                  typeof w.id === 'number' ? w.id === bot.index : w.id === bot.id
+                );
                 if (serverWorker) {
                   // Convert position array [x, y, z] to object {x, y} (using x and z for 2D view)
                   let position = bot.position;
@@ -239,6 +281,40 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
                 isRunning: data.data.task_active || false,
                 startTime: data.data.start_time || prev.taskStats.startTime
               }
+            }));
+          } else if (data.status === 'accepted' || data.status === 'rejected') {
+            // Handle Protocol V2 command acknowledgments
+            const ackEvent: BotEvent = {
+              id: (++eventIdCounter.current).toString(),
+              timestamp: Date.now(),
+              botId: data.data?.job_id || 'system',
+              type: data.status.toUpperCase(),
+              jobId: data.data?.job_id || 'unknown',
+              message: data.status === 'accepted' 
+                ? `Command accepted (Job: ${data.data?.job_id})`
+                : `Command rejected: ${data.message || 'Unknown error'}`,
+              details: data
+            };
+
+            setState(prev => ({
+              ...prev,
+              events: [...prev.events.slice(-99), ackEvent]
+            }));
+          } else if ((data.status === 'success' || data.status === 'error') && !data.data?.workers) {
+            // Handle Protocol V2 control responses (start/stop/reset operations)
+            const controlEvent: BotEvent = {
+              id: (++eventIdCounter.current).toString(),
+              timestamp: Date.now(),
+              botId: 'system',
+              type: data.status.toUpperCase(),
+              jobId: 'control',
+              message: data.message || `Control operation ${data.status}`,
+              details: data
+            };
+
+            setState(prev => ({
+              ...prev,
+              events: [...prev.events.slice(-99), controlEvent]
             }));
           }
         } catch (error) {
@@ -314,9 +390,26 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
 
   // Transform client command format to server format
   const transformCommandForServer = useCallback((command: any) => {
+    // For Protocol V2, prefer numeric index if available; fallback to string bot_id
+    let botId = command.bot_id || 0;
+    
+    // If bot_id is a string, try to find the numeric index from current bots
+    if (typeof botId === 'string') {
+      const bot = state.bots.find(b => b.id === botId);
+      if (bot) {
+        botId = bot.index; // Use numeric index for Protocol V2
+      }
+    }
+    
+    // Handle Protocol V2 aliases
+    let commandType = command.command;
+    if (commandType === 'place_blueprint') {
+      commandType = 'place_block'; // Protocol V2 alias: place_blueprint → place_block
+    }
+    
     const baseCommand = {
-      type: command.command,
-      bot_id: command.bot_id || 0,
+      type: commandType,
+      bot_id: botId,
       job_id: `gui_job_${Date.now()}`
     };
 
@@ -378,7 +471,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       default:
         return baseCommand;
     }
-  }, []);
+  }, [state.bots]);
 
   const sendCommand = useCallback((command: any) => {
     if (websocket.current?.readyState === WebSocket.OPEN) {
