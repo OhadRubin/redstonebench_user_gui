@@ -132,7 +132,8 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
                   currentJob: 'Querying status...',
                   status: 'IDLE' as const,
                   lastActivity: 'Connected',
-                  utilization: 0
+                  utilization: 0,
+                  lastLog: 'Bot connected and ready' // Default initial state
                 };
               });
 
@@ -271,7 +272,8 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
                     currentJob: serverWorker.current_job || (serverWorker.status === 'IDLE' ? 'Idle - awaiting commands' : 'Working'),
                     status: serverWorker.status === 'BUSY' ? 'IN_PROGRESS' : 'IDLE',
                     lastActivity: serverWorker.current_job || 'Connected',
-                    utilization: serverWorker.utilization || 0
+                    utilization: serverWorker.utilization || 0,
+                    lastLog: serverWorker.last_log || bot.lastLog // NEW: Handle last_log field
                   };
                 }
                 return bot;

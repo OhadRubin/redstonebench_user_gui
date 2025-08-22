@@ -11,6 +11,60 @@ interface NewCommandCenterProps {
   onMoveTargetChange: (target: { x: number; y: number; z: number } | null) => void;
 }
 
+// Selected Bot Last Log Display Component  
+interface SelectedBotLogDisplayProps {
+  selectedBot: BotStatus | null;
+}
+
+const SelectedBotLogDisplay: React.FC<SelectedBotLogDisplayProps> = ({ selectedBot }) => {
+  if (!selectedBot) {
+    return (
+      <div style={{
+        background: 'rgba(0, 0, 0, 0.3)',
+        padding: '8px',
+        borderRadius: '6px',
+        border: '1px solid rgba(255, 255, 255, 0.1)'
+      }}>
+        <div style={{
+          color: '#666',
+          fontSize: '10px',
+          fontFamily: "'Courier New', monospace",
+          textAlign: 'center'
+        }}>
+          No bot selected - select a bot to see recent activity
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      background: 'rgba(0, 255, 255, 0.1)',
+      border: '1px solid rgba(0, 255, 255, 0.3)',
+      borderRadius: '6px',
+      padding: '8px'
+    }}>
+      <div style={{
+        color: '#00ffff',
+        fontSize: '10px',
+        fontWeight: 'bold',
+        marginBottom: '4px',
+        fontFamily: "'Courier New', monospace"
+      }}>
+        🤖 Recent Activity - {selectedBot.id}
+      </div>
+      <div style={{
+        color: '#ccc',
+        fontSize: '10px',
+        fontFamily: "'Courier New', monospace",
+        wordBreak: 'break-word'
+      }}>
+        {selectedBot.lastLog || 'No recent activity'}
+      </div>
+    </div>
+  );
+};
+
 const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availableBots, onCommandSent, selectedCommand, onCommandChange, moveTarget, onMoveTargetChange }) => {
 
   // Form states for different commands
@@ -606,6 +660,7 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
       height: '100%',
       display: 'grid',
       gridTemplateColumns: '1fr 2fr 1fr',
+      gridTemplateRows: 'auto auto',
       gap: '16px',
       minWidth: '800px'
     }}>
@@ -646,6 +701,25 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
         padding: '12px'
       }}>
         {renderContextualOptions()}
+      </div>
+
+      {/* Selected Bot Recent Activity (Full Width Bottom Row) */}
+      <div style={{
+        gridColumn: '1 / -1', // Span all columns
+        background: 'linear-gradient(to bottom, #222 0%, #111 100%)',
+        border: '1px solid #444',
+        borderRadius: '6px',
+        padding: '12px'
+      }}>
+        <div style={{
+          fontSize: '11px',
+          fontWeight: 'bold',
+          color: '#00ffff',
+          marginBottom: '8px',
+          textAlign: 'center'
+        }}>
+        </div>
+        <SelectedBotLogDisplay selectedBot={selectedBot} />
       </div>
     </div>
   );

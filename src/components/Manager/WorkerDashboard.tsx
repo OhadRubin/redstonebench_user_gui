@@ -9,6 +9,7 @@ export interface BotStatus {
   status: 'IDLE' | 'IN_PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED';
   lastActivity: string;
   utilization: number; // percentage
+  lastLog?: string; // NEW: Recent general bot activity from server
 }
 
 interface WorkerDashboardProps {

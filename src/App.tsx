@@ -97,7 +97,7 @@ const TopBar = ({ taskStats, connectionStatus }: { taskStats: any, connectionSta
   );
 };
 
-// Bottom Panel Container interfaces
+// Bottom Panel Container interfaces (same for both wrapper and main panel)
 interface BottomPanelProps {
   bots: BotStatus[];
   availableBots: string[];
@@ -115,7 +115,11 @@ interface BottomPanelProps {
   onMoveTargetChange: (target: { x: number; y: number; z: number } | null) => void;
 }
 
-const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, taskStats, actions, selectedBot, onBotSelect, viewport, mainCanvasDimensions, onMinimapClick, selectedCommand, onCommandChange, moveTarget, onMoveTargetChange }) => {
+interface MainBottomPanelProps extends BottomPanelProps {}
+
+// Selected Bot Last Log Display is now integrated into NewCommandCenter component
+
+const MainBottomPanel: React.FC<MainBottomPanelProps> = ({ bots, availableBots, events, taskStats, actions, selectedBot, onBotSelect, viewport, mainCanvasDimensions, onMinimapClick, selectedCommand, onCommandChange, moveTarget, onMoveTargetChange }) => {
   return (
     <div style={{
       background: 'linear-gradient(to bottom, #111 0%, #000 100%)',
@@ -124,9 +128,9 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      height: '350px',
+      height: '450px',
       flexShrink: 0, // Critical: prevents bottom panel from shrinking
-      minHeight: '350px' // Ensures minimum height is maintained
+      minHeight: '450px' // Ensures minimum height is maintained
     }}>
       {/* Left - Unit Selection (Compact) */}
       <div style={{ 
@@ -205,6 +209,23 @@ const BottomPanel: React.FC<BottomPanelProps> = ({ bots, availableBots, events, 
           </div>
         </div> */}
       </div>
+    </div>
+  );
+};
+
+// New BottomPanel Wrapper - contains MainBottomPanel + LastLogDisplay
+const BottomPanel: React.FC<BottomPanelProps> = (props) => {
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      flexShrink: 0,
+      minHeight: '350px'
+    }}>
+      {/* Top: Existing main panel */}
+      <MainBottomPanel {...props} />
+      
+      {/* Bottom: Selected bot log display moved to NewCommandCenter */}
     </div>
   );
 };
