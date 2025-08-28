@@ -959,16 +959,34 @@ function App() {
   // WebSocket connection
   useEffect(() => {
     let ws;
+    let statusInterval;
+    
     const connect = () => {
+      // Clean up any existing interval
+      if (statusInterval) {
+        clearInterval(statusInterval);
+        statusInterval = null;
+      }
+      
       setConn("connecting");
       ws = new WebSocket("ws://localhost:8080");
       wsRef.current = ws;
 
       ws.onopen = () => {
         setConn("connected");
+        console.log("WebSocket connected, requesting initial status");
+        
         const statusRequest = {"type": "get_status_all"};
         console.log("Sending WebSocket message:", statusRequest);
         ws.send(JSON.stringify(statusRequest));
+        
+        // Set up periodic status updates every 3 seconds
+        statusInterval = setInterval(() => {
+          if (wsRef.current && wsRef.current.readyState === 1) { // WebSocket.OPEN
+            console.log("Sending periodic status request");
+            wsRef.current.send(JSON.stringify({"type": "get_status_all"}));
+          }
+        }, 3000);
       };
 
       ws.onmessage = e => {
@@ -1009,6 +1027,10 @@ function App() {
 
       ws.onclose = () => {
         setConn("disconnected");
+        if (statusInterval) {
+          clearInterval(statusInterval);
+          statusInterval = null;
+        }
         setTimeout(connect, 2000);
       };
       
@@ -1016,7 +1038,10 @@ function App() {
     };
     
     connect();
-    return () => ws && ws.close();
+    return () => {
+      if (statusInterval) clearInterval(statusInterval);
+      if (ws) ws.close();
+    };
   }, []);
 
   // Send command
