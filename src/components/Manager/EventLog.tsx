@@ -3,15 +3,13 @@ import React, { useEffect, useRef } from 'react';
 export interface BotEvent {
   id: string;
   timestamp: number;
-  botId: string; // Changed to string to match server format (e.g., "worker_0")
-  type: 'START' | 'PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'COMMAND_SENT' | 
-        'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'CANCEL_FAILED' | 'CANCEL_SUCCESS' | 
-        'CANCEL_REQUESTED' | 'ERROR' | 'UNKNOWN_MESSAGE' | 'SUCCESS' | 
-        'BOT_BUSY' | 'INVALID_PARAMETERS' | 'BOT_NOT_FOUND' | 'INTERNAL_ERROR';
-  jobId?: string;
+  bot_id: string; // Contract-compliant naming (e.g., "worker_0")
+  type: 'command_response' | 'job_start' | 'job_progress' | 'job_complete' | 'job_failed' | 
+        'status_response' | 'cancel_response';
+  job_id?: string; // Contract-compliant naming
   message: string;
   details?: any;
-  errorCode?: string;
+  errorCode?: string; // For contract error codes: BOT_BUSY, INVALID_PARAMETERS, BOT_NOT_FOUND, INTERNAL_ERROR
 }
 
 interface EventLogProps {
@@ -29,24 +27,26 @@ const EventLog: React.FC<EventLogProps> = ({ events, onClearLog }) => {
 
   const getEventColor = (type: BotEvent['type']) => {
     switch (type) {
-      case 'START': return '#00aaff';
-      case 'PROGRESS': return '#888';
-      case 'COMPLETE': return '#00ff44';
-      case 'FAILED': return '#ff4444';
-      case 'BLOCKED': return '#ffaa44';
-      case 'COMMAND_SENT': return '#ff88ff';
+      case 'job_start': return '#00ff44';
+      case 'job_progress': return '#00aaff';
+      case 'job_complete': return '#00ff44';
+      case 'job_failed': return '#ff4444';
+      case 'command_response': return '#ffaa44';
+      case 'status_response': return '#888';
+      case 'cancel_response': return '#ff8844';
       default: return '#fff';
     }
   };
 
   const getEventIcon = (type: BotEvent['type']) => {
     switch (type) {
-      case 'START': return '▶️';
-      case 'PROGRESS': return '⏳';
-      case 'COMPLETE': return '✅';
-      case 'FAILED': return '❌';
-      case 'BLOCKED': return '⚠️';
-      case 'COMMAND_SENT': return '📤';
+      case 'job_start': return '▶️';
+      case 'job_progress': return '⏳';
+      case 'job_complete': return '✅';
+      case 'job_failed': return '❌';
+      case 'command_response': return '📤';
+      case 'status_response': return 'ℹ️';
+      case 'cancel_response': return '🛑';
       default: return '📄';
     }
   };
@@ -74,9 +74,8 @@ const EventLog: React.FC<EventLogProps> = ({ events, onClearLog }) => {
 
   const getEventStyle = (type: BotEvent['type']): React.CSSProperties => ({
     ...eventStyle,
-    background: type === 'FAILED' ? '#331111' : 
-                type === 'BLOCKED' ? '#332211' : 
-                type === 'COMPLETE' ? '#113311' : '#1a1a1a',
+    background: type === 'job_failed' ? '#331111' : 
+                type === 'job_complete' ? '#113311' : '#1a1a1a',
     borderLeftColor: getEventColor(type)
   });
 
@@ -183,7 +182,7 @@ const EventLog: React.FC<EventLogProps> = ({ events, onClearLog }) => {
                     color: getEventColor(event.type),
                     fontWeight: 'bold'
                   }}>
-                    Bot {event.botId} • {event.type}
+                    Bot {event.bot_id} • {event.type}
                   </span>
                   <span style={{ color: '#666', fontSize: '9px' }}>
                     {formatTime(event.timestamp)}
@@ -192,9 +191,9 @@ const EventLog: React.FC<EventLogProps> = ({ events, onClearLog }) => {
                 <div style={{ color: '#ccc', lineHeight: '1.3' }}>
                   {event.message}
                 </div>
-                {event.jobId && (
+                {event.job_id && (
                   <div style={{ color: '#666', fontSize: '9px', marginTop: '2px' }}>
-                    Job: {event.jobId}
+                    Job: {event.job_id}
                   </div>
                 )}
                 {event.errorCode && (

@@ -24,7 +24,6 @@ export interface RedstoneBenchState {
 
 // Contract error codes as defined in contract.md
 const CONTRACT_ERROR_CODES = ['BOT_BUSY', 'INVALID_PARAMETERS', 'BOT_NOT_FOUND', 'INTERNAL_ERROR'] as const;
-type ContractErrorCode = typeof CONTRACT_ERROR_CODES[number];
 
 // Bot ID validation helper (contract specifies 0-64 range)
 const isValidBotId = (botId: number): boolean => {
@@ -108,42 +107,9 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     }
   }, []);
 
-  // Handle contract-specific error codes
+  // Handle contract-specific error codes through console logging only
   const handleContractError = useCallback((error: { code: string; message: string }, botId?: number) => {
-    let errorType: BotEvent['type'] = 'ERROR';
-    let errorMessage = error.message;
-
-    switch (error.code as ContractErrorCode) {
-      case 'BOT_BUSY':
-        errorType = 'BOT_BUSY';
-        break;
-      case 'INVALID_PARAMETERS':
-        errorType = 'INVALID_PARAMETERS';
-        break;
-      case 'BOT_NOT_FOUND':
-        errorType = 'BOT_NOT_FOUND';
-        break;
-      case 'INTERNAL_ERROR':
-        errorType = 'INTERNAL_ERROR';
-        break;
-      default:
-        console.warn('⚠️ Unrecognized error code:', error.code);
-    }
-
-    const errorEvent: BotEvent = {
-      id: (++eventIdCounter.current).toString(),
-      timestamp: Date.now(),
-      botId: botId ? botId.toString() : 'system',
-      type: errorType,
-      message: errorMessage,
-      details: error,
-      errorCode: error.code
-    };
-
-    setState(prev => ({
-      ...prev,
-      events: [...prev.events.slice(-99), errorEvent]
-    }));
+    console.error('Contract error:', error.code, error.message, botId ? `(bot ${botId})` : '');
   }, []);
 
   const connectWebSocket = useCallback(() => {
@@ -185,8 +151,8 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
             const responseEvent: BotEvent = {
               id: (++eventIdCounter.current).toString(),
               timestamp: Date.now(),
-              botId: data.bot_id ? data.bot_id.toString() : 'system',
-              type: data.status === 'accepted' ? 'ACCEPTED' : 'REJECTED',
+              bot_id: data.bot_id ? data.bot_id.toString() : 'system',
+              type: 'command_response',
               message: data.status === 'accepted' 
                 ? `Command ${data.cmd} accepted for bot ${data.bot_id}`
                 : `Command ${data.cmd} rejected: ${data.error?.message || data.message || 'Unknown error'}`,
@@ -239,8 +205,8 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
             const cancelEvent: BotEvent = {
               id: (++eventIdCounter.current).toString(),
               timestamp: Date.now(),
-              botId: data.bot_id.toString(),
-              type: data.success ? 'CANCELLED' : 'CANCEL_FAILED',
+              bot_id: data.bot_id.toString(),
+              type: 'cancel_response',
               message: data.success 
                 ? `Job cancelled for bot ${data.bot_id}: ${data.message || 'Success'}`
                 : `Cancel failed for bot ${data.bot_id}: ${data.message || 'Unknown error'}`,
@@ -258,12 +224,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
               return;
             }
 
-            const eventTypeMap: {[key: string]: string} = {
-              'job_start': 'START',
-              'job_progress': 'PROGRESS', 
-              'job_complete': 'COMPLETE',
-              'job_failed': 'FAILED'
-            };
+            // Process contract-compliant job lifecycle events
 
             const generateEventMessage = (eventData: any) => {
               const bot = state.bots.find(b => b.index === eventData.bot_id);
@@ -310,9 +271,9 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
             const newEvent: BotEvent = {
               id: (++eventIdCounter.current).toString(),
               timestamp: data.timestamp || Date.now(),
-              botId: data.bot_id.toString(),
-              type: eventTypeMap[data.type] || data.type.toUpperCase(),
-              jobId: `job_${data.bot_id}_${Date.now()}`,
+              bot_id: data.bot_id.toString(),
+              type: data.type as BotEvent['type'],
+              job_id: `job_${data.bot_id}_${Date.now()}`,
               message: data.message || generateEventMessage(data),
               details: data.result || data.error_details || data,
               errorCode: undefined
@@ -326,20 +287,8 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
             // Log unrecognized message types for debugging
             console.warn('⚠️ Received message type not in contract:', data.type, data);
             
-            // Add event for unknown message types
-            const unknownEvent: BotEvent = {
-              id: (++eventIdCounter.current).toString(),
-              timestamp: Date.now(),
-              botId: 'system',
-              type: 'UNKNOWN_MESSAGE',
-              message: `Received non-contract message type: ${data.type}`,
-              details: data
-            };
-
-            setState(prev => ({
-              ...prev,
-              events: [...prev.events.slice(-99), unknownEvent]
-            }));
+            // Skip unknown message types rather than creating events for them
+            console.warn('⚠️ Received message type not in contract:', data.type, data);
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -529,39 +478,14 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
         websocket.current.send(JSON.stringify(serverCommand));
       }
 
-      // Add local event for immediate feedback
-      const newEvent: BotEvent = {
-        id: (++eventIdCounter.current).toString(),
-        timestamp: Date.now(),
-        botId: command.bot_id,
-        type: 'COMMAND_SENT',
-        message: `Sent ${command.command} command to Bot ${command.bot_id}`,
-        details: command
-      };
-
-      setState(prevState => ({
-        ...prevState,
-        events: [...prevState.events.slice(-99), newEvent]
-      }));
+      // Commands are tracked through server responses, no local event needed
 
 
       console.log('Command sent:', command);
     } catch (error) {
       // Handle validation errors
-      const errorEvent: BotEvent = {
-        id: (++eventIdCounter.current).toString(),
-        timestamp: Date.now(),
-        botId: command.bot_id || 'system',
-        type: 'ERROR',
-        message: `Failed to send command: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        details: { command, error: error instanceof Error ? error.message : error },
-        errorCode: 'INVALID_PARAMETERS'
-      };
-
-      setState(prevState => ({
-        ...prevState,
-        events: [...prevState.events.slice(-99), errorEvent]
-      }));
+      // Log error to console only, contract doesn't define local error events
+      console.error('Failed to send command:', error instanceof Error ? error.message : error);
     }
   }, [transformCommandForServer]);
 
@@ -627,19 +551,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       console.log('Cancel job message sent:', cancelMessage);
 
       // Add local event for immediate feedback
-      const newEvent: BotEvent = {
-        id: (++eventIdCounter.current).toString(),
-        timestamp: Date.now(),
-        botId: typeof botId === 'string' ? botId : botId.toString(),
-        type: 'CANCEL_REQUESTED',
-        message: `Cancel job requested for Bot ${botId}`,
-        details: { botId: resolvedBotId }
-      };
-
-      setState(prevState => ({
-        ...prevState,
-        events: [...prevState.events.slice(-99), newEvent]
-      }));
+      // Cancel requests are tracked through server responses, no local event needed
     }
   }, [state.bots]);
 

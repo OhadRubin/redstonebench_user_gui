@@ -4,12 +4,12 @@ import { useRedstoneBench } from '../../hooks/useRedstoneBench';
 
 // Contract-compliant bot job progress interface
 interface BotJobProgress {
-  botId: string | number;
+  bot_id: string | number;
   progress_percent: number;
   current_location: [number, number, number];
   message: string;
   status: 'IDLE' | 'BUSY';
-  jobType?: string;
+  job_type?: string;
 }
 
 // Contract error codes as per specification
@@ -39,7 +39,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = () => {
         const { bot_id, result } = event.details;
         if (result && typeof result.progress_percent === 'number') {
           const botProgress: BotJobProgress = {
-            botId: bot_id,
+            bot_id: bot_id,
             progress_percent: result.progress_percent,
             current_location: result.current_location || [0, 64, 0],
             message: result.message || 'Working...',
@@ -50,17 +50,17 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = () => {
         }
       } else if (event.type === 'job_complete' || event.type === 'job_failed') {
         // Clear progress when job completes/fails
-        const botId = event.botId;
+        const botId = event.bot_id;
         setBotJobProgress(prev => {
           const newMap = new Map(prev);
           newMap.delete(botId);
           return newMap;
         });
-      } else if (event.type === 'command_response' && event.status === 'rejected') {
+      } else if (event.type === 'command_response' && event.details && event.details.status === 'rejected') {
         // Handle contract error codes
         setLastError({
-          code: event.error.code as ContractErrorCode,
-          message: event.error.message
+          code: event.details.error.code as ContractErrorCode,
+          message: event.details.error.message
         });
         setTimeout(() => setLastError(null), 5000); // Clear error after 5 seconds
       }
