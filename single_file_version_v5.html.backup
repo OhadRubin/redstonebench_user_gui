@@ -1,0 +1,2321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RedstoneBench HCI - Ultra</title>
+
+<!-- React 18 + Babel -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script crossorigin src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0a0e27;
+  color: #e6edf3;
+  overflow: hidden;
+  user-select: none;
+}
+
+#root { height: 100%; display: flex; flex-direction: column; }
+
+/* ─── Animations ─────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}
+
+@keyframes slideInDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(88, 166, 255, 0.4), inset 0 0 10px rgba(88, 166, 255, 0.1); }
+  50% { box-shadow: 0 0 40px rgba(88, 166, 255, 0.6), inset 0 0 20px rgba(88, 166, 255, 0.2); }
+}
+
+@keyframes rotateGlow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes scanning {
+  0% { transform: translateY(-100%); opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+/* ─── Top Bar ─────────────────────────────── */
+#top-bar {
+  background: linear-gradient(135deg, #1a1f3a 0%, #242b47 100%);
+  color: #fff;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  border-bottom: 2px solid rgba(88, 166, 255, 0.3);
+  backdrop-filter: blur(20px);
+  animation: slideInDown 0.5s ease;
+  position: relative;
+  z-index: 100;
+}
+
+#top-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #58a6ff, transparent);
+  animation: scanning 3s infinite;
+}
+
+.top-bar-section {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.5px;
+}
+
+.brand-icon {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #58a6ff, #1f6feb);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  animation: pulse 2s infinite;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.1));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #58a6ff, #2ea043, #58a6ff);
+  border-radius: 24px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+}
+
+.metric:hover::before {
+  opacity: 0.3;
+}
+
+.metric:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(88, 166, 255, 0.3);
+}
+
+.metric-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+}
+
+.status-dot::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.3;
+  animation: pulse 2s infinite;
+}
+
+.status-connected { background: #2ea043; }
+.status-connecting { background: #e3b341; }
+.status-disconnected { background: #f85149; }
+
+/* ─── Main Layout ─────────────────────────── */
+#main {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0a0e27 0%, #151932 50%, #0a0e27 100%);
+}
+
+/* ─── Canvas Zone ──────────────────────────── */
+#canvas-zone {
+  position: relative;
+  background: linear-gradient(145deg, #0d1117, #1a1f2e);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 
+    0 10px 40px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  animation: slideInUp 0.6s ease;
+}
+
+#bot-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+#bot-canvas:active { cursor: grabbing; }
+
+/* ─── Minimap ──────────────────────────────── */
+#minimap {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 150px;
+  height: 150px;
+  background: rgba(13, 17, 23, 0.9);
+  border: 2px solid rgba(88, 166, 255, 0.3);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  transition: all 0.3s ease;
+}
+
+#minimap:hover {
+  transform: scale(1.1);
+  border-color: rgba(88, 166, 255, 0.6);
+}
+
+/* ─── Task Panel ──────────────────────────── */
+#task-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(20, 27, 40, 0.95));
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 16px;
+  padding: 20px;
+  width: 280px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  animation: slideInUp 0.7s ease;
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  font-size: 16px;
+  color: #58a6ff;
+}
+
+.task-header-icon {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0.1));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.progress-container {
+  margin: 20px 0;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  animation: scanning 2s infinite;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #58a6ff, #2ea043);
+  border-radius: 6px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 0 0 20px rgba(46, 160, 67, 0.5);
+}
+
+.progress-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #7d8590;
+  display: flex;
+  justify-content: space-between;
+}
+
+.task-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-running {
+  background: linear-gradient(135deg, rgba(46, 160, 67, 0.2), rgba(46, 160, 67, 0.3));
+  color: #2ea043;
+  border: 1px solid rgba(46, 160, 67, 0.3);
+}
+
+.status-stopped {
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.2), rgba(248, 81, 73, 0.3));
+  color: #f85149;
+  border: 1px solid rgba(248, 81, 73, 0.3);
+}
+
+/* ─── Keyboard Shortcuts Panel ─────────────── */
+#shortcuts-panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  font-size: 11px;
+  max-width: 200px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#shortcuts-panel.visible {
+  opacity: 1;
+}
+
+.shortcut-item {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0;
+  color: #7d8590;
+}
+
+.shortcut-key {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  color: #58a6ff;
+}
+
+/* ─── Bottom Panel ─────────────────────────── */
+#bottom-panel {
+  display: flex;
+  gap: 12px;
+  height: 320px;
+}
+
+.panel {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(20, 27, 40, 0.95));
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  transition: all 0.3s ease;
+  animation: slideInUp 0.8s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(88, 166, 255, 0.5), transparent);
+}
+
+.panel:hover {
+  border-color: rgba(88, 166, 255, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 15px 50px rgba(0,0,0,0.4);
+}
+
+.panel:first-child { 
+  flex: 0 0 280px; 
+}
+
+.panel:nth-child(2) { 
+  flex: 1; 
+}
+
+.panel:last-child { 
+  flex: 0 0 380px; 
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(88, 166, 255, 0.1);
+  font-weight: 600;
+  font-size: 14px;
+  color: #58a6ff;
+}
+
+.panel-header-icon {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0.1));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Unit Selection ──────────────────────── */
+.unit-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 8px;
+}
+
+.unit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(33, 38, 45, 0.5), rgba(28, 33, 40, 0.5));
+  border: 1px solid rgba(88, 166, 255, 0.1);
+  border-radius: 10px;
+  color: #e6edf3;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 500;
+  position: relative;
+  overflow: hidden;
+}
+
+.unit-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(88, 166, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.unit-btn:hover::before {
+  left: 100%;
+}
+
+.unit-btn:hover {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.15), rgba(88, 166, 255, 0.1));
+  border-color: rgba(88, 166, 255, 0.4);
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(88, 166, 255, 0.2);
+}
+
+.unit-btn.selected {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.3), rgba(46, 160, 67, 0.3));
+  border-color: #58a6ff;
+  animation: glow 2s infinite;
+  box-shadow: 0 0 20px rgba(88, 166, 255, 0.3);
+}
+
+.unit-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.unit-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.unit-details {
+  flex: 1;
+}
+
+.unit-name {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.unit-coords {
+  font-size: 11px;
+  color: #7d8590;
+  font-family: monospace;
+}
+
+.bot-status-icon {
+  font-size: 16px;
+  animation: pulse 2s infinite;
+}
+
+.select-all-btn {
+  padding: 8px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(88, 166, 255, 0.05));
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: 8px;
+  color: #58a6ff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.select-all-btn:hover {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0.1));
+  border-color: #58a6ff;
+}
+
+/* ─── Command Center ──────────────────────── */
+.bot-info {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.05), rgba(88, 166, 255, 0.02));
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(88, 166, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.bot-info::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(88, 166, 255, 0.1), transparent);
+  transform: rotate(45deg);
+  animation: scanning 3s infinite;
+}
+
+.bot-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.bot-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bot-info-label {
+  font-size: 11px;
+  color: #7d8590;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bot-info-value {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.command-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #7d8590;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tab-btn:hover {
+  background: rgba(88, 166, 255, 0.1);
+  color: #e6edf3;
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0.3));
+  color: #58a6ff;
+  box-shadow: 0 2px 8px rgba(88, 166, 255, 0.3);
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.cmd-btn {
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.05), rgba(88, 166, 255, 0.02));
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: 10px;
+  color: #e6edf3;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.cmd-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: radial-gradient(circle, rgba(88, 166, 255, 0.3), transparent);
+  transform: translate(-50%, -50%);
+  transition: width 0.3s ease, height 0.3s ease;
+}
+
+.cmd-btn:hover::before {
+  width: 100%;
+  height: 100%;
+}
+
+.cmd-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(88, 166, 255, 0.3);
+  border-color: #58a6ff;
+}
+
+.cmd-btn.active {
+  background: linear-gradient(135deg, #58a6ff, #1f6feb);
+  border-color: #58a6ff;
+  color: #fff;
+  animation: pulse 2s infinite;
+}
+
+.cmd-icon {
+  font-size: 20px;
+}
+
+.coord-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.coord-input-wrapper {
+  position: relative;
+}
+
+.coord-label {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(20, 27, 40, 0.95));
+  padding: 0 4px;
+  font-size: 10px;
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+input[type="number"] {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(13, 17, 23, 0.5);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 14px;
+  font-family: monospace;
+  transition: all 0.2s ease;
+}
+
+input[type="number"]:focus {
+  outline: none;
+  border-color: #58a6ff;
+  background: rgba(88, 166, 255, 0.05);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+}
+
+input[type="number"]::placeholder {
+  color: #484f58;
+}
+
+#exec-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #238636, #2ea043);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+}
+
+#exec-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.2), transparent);
+  transform: translate(-50%, -50%);
+  transition: width 0.5s ease, height 0.5s ease;
+}
+
+#exec-btn:hover::before {
+  width: 300%;
+  height: 300%;
+}
+
+#exec-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(46, 160, 67, 0.4);
+}
+
+#exec-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+#exec-btn:disabled {
+  background: linear-gradient(135deg, rgba(48, 54, 61, 0.5), rgba(38, 44, 51, 0.5));
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.recent-activity {
+  margin-top: auto;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #7d8590;
+  min-height: 48px;
+  border: 1px solid rgba(88, 166, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-icon {
+  color: #58a6ff;
+  animation: pulse 2s infinite;
+}
+
+/* ─── Command Queue ───────────────────────── */
+.command-queue {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  border: 1px solid rgba(88, 166, 255, 0.1);
+}
+
+.queue-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #58a6ff;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(88, 166, 255, 0.05);
+  border-radius: 6px;
+  margin: 4px 0;
+  font-size: 11px;
+  color: #e6edf3;
+  animation: slideInUp 0.3s ease;
+}
+
+.queue-item-cmd {
+  font-weight: 500;
+}
+
+.queue-item-target {
+  color: #7d8590;
+  font-family: monospace;
+}
+
+/* ─── Log Panel ───────────────────────────── */
+#log {
+  flex: 1;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.3));
+  border-radius: 10px;
+  padding: 16px;
+  overflow: auto;
+  max-height: 240px;
+  scroll-behavior: smooth;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.8;
+  border: 1px solid rgba(88, 166, 255, 0.1);
+}
+
+.log-entry {
+  padding: 8px 12px;
+  border-left: 2px solid transparent;
+  margin: 4px 0;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  background: rgba(88, 166, 255, 0.02);
+  animation: slideInUp 0.3s ease;
+}
+
+.log-entry:hover {
+  background: rgba(88, 166, 255, 0.08);
+  border-left-color: #58a6ff;
+  transform: translateX(4px);
+}
+
+.log-entry.error {
+  background: rgba(248, 81, 73, 0.05);
+  border-left-color: #f85149;
+  color: #ff7b72;
+}
+
+.log-entry.success {
+  background: rgba(46, 160, 67, 0.05);
+  border-left-color: #2ea043;
+  color: #7ee787;
+}
+
+.log-entry.info {
+  background: rgba(88, 166, 255, 0.05);
+  border-left-color: #58a6ff;
+  color: #79c0ff;
+}
+
+.log-time {
+  color: #484f58;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.log-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.filter-btn {
+  padding: 6px 10px;
+  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: 6px;
+  color: #7d8590;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+  background: rgba(88, 166, 255, 0.2);
+  color: #e6edf3;
+}
+
+.filter-btn.active {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0.3));
+  color: #58a6ff;
+  border-color: #58a6ff;
+}
+
+/* ─── Tooltip ─────────────────────────────── */
+.tooltip {
+  position: absolute;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(20, 27, 40, 0.98));
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  animation: slideInUp 0.2s ease;
+  color: #e6edf3;
+  max-width: 200px;
+}
+
+/* ─── Scrollbar ───────────────────────────── */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.3), rgba(88, 166, 255, 0.5));
+  border-radius: 5px;
+  border: 1px solid rgba(88, 166, 255, 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.5), rgba(88, 166, 255, 0.7));
+}
+
+/* ─── Responsive ──────────────────────────── */
+@media (max-width: 1200px) {
+  .panel:first-child { flex: 0 0 240px; }
+  .panel:last-child { flex: 0 0 320px; }
+}
+
+@media (max-width: 992px) {
+  #bottom-panel {
+    flex-direction: column;
+    height: auto;
+  }
+  .panel {
+    width: 100%;
+    flex: none !important;
+  }
+}
+
+/* ─── Loading Animation ───────────────────── */
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(88, 166, 255, 0.2);
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Notification ────────────────────────── */
+.notification {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(20, 27, 40, 0.98));
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  animation: slideInDown 0.3s ease;
+  z-index: 1001;
+  max-width: 320px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notification-icon {
+  font-size: 20px;
+}
+
+.notification-content {
+  flex: 1;
+}
+
+.notification-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #e6edf3;
+}
+
+.notification-message {
+  font-size: 13px;
+  color: #7d8590;
+}
+
+.notification.success {
+  border-color: rgba(46, 160, 67, 0.5);
+}
+
+.notification.error {
+  border-color: rgba(248, 81, 73, 0.5);
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const {useState, useEffect, useRef, useCallback, useMemo} = React;
+
+/* ──────────────────────── DATA MODELS ──────────────────────── */
+function emptyBot(id, index) {
+  return {
+    id: `worker_${id}`,
+    index,
+    position: [0, 64, 0],
+    status: "IDLE",
+    currentJob: "Idle - awaiting commands",
+    lastLog: "Bot connected and ready",
+    selected: false,
+    path: []
+  };
+}
+
+/* ──────────────────────── HOOKS ──────────────────────────── */
+function useWebSocket(url) {
+  const [status, setStatus] = useState("connecting");
+  const [lastMessage, setLastMessage] = useState(null);
+  const wsRef = useRef(null);
+  const reconnectTimeout = useRef(null);
+
+  const send = useCallback((data) => {
+    if ((wsRef.current && wsRef.current.readyState) === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(data));
+      return true;
+    }
+    return false;
+  }, []);
+
+  useEffect(() => {
+    let statusInterval;
+    
+    const connect = () => {
+      if (statusInterval) clearInterval(statusInterval);
+      
+      setStatus("connecting");
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setStatus("connected");
+        send({ type: "get_status_all" });
+        
+        statusInterval = setInterval(() => {
+          send({ type: "get_status_all" });
+        }, 3000);
+      };
+
+      ws.onmessage = (e) => {
+        setLastMessage(JSON.parse(e.data));
+      };
+
+      ws.onclose = () => {
+        setStatus("disconnected");
+        if (statusInterval) clearInterval(statusInterval);
+        reconnectTimeout.current = setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => ws.close();
+    };
+
+    connect();
+
+    return () => {
+      if (statusInterval) clearInterval(statusInterval);
+      if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, [url, send]);
+
+  return { status, lastMessage, send };
+}
+
+/* ──────────────────────── TOP BAR ──────────────────────────── */
+function TopBar({elapsed, stats, connStatus}) {
+  const dotClass = connStatus === "connected" ? "status-connected" :
+                   connStatus === "connecting" ? "status-connecting" : "status-disconnected";
+  
+  return (
+    <div id="top-bar">
+      <div className="top-bar-section">
+        <div className="brand">
+          <div className="brand-icon">🎮</div>
+          <span>RedstoneBench HCI Ultra</span>
+        </div>
+      </div>
+      <div className="top-bar-section">
+        <div className="metric">
+          <span>⏱️</span>
+          <span className="metric-value">{elapsed}</span>
+        </div>
+        <div className="metric">
+          <span>📊</span>
+          <span className="metric-value">{stats.completedBlocks}/{stats.totalBlocks}</span>
+        </div>
+        <div className="metric">
+          <span>🤖</span>
+          <span className="metric-value">{stats.workerCount} Active</span>
+        </div>
+        <div className="metric">
+          <span>⚡</span>
+          <span className="metric-value">{stats.efficiency}%</span>
+        </div>
+        <div className="status-indicator">
+          <span className={`status-dot ${dotClass}`}></span>
+          <span>{connStatus}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────── ENHANCED MAP CANVAS ─────────────── */
+function MapCanvas({bots, selectedIds, onSelect, selectedCommand, moveTarget, onMoveTargetChange, onMultiSelect}) {
+  const canvasRef = useRef(null);
+  const minimapRef = useRef(null);
+  const [{offsetX, offsetY, zoom}, setView] = useState({offsetX: 0, offsetY: 0, zoom: 1});
+  const isPanning = useRef(false);
+  const isSelecting = useRef(false);
+  const selectStart = useRef({x: 0, y: 0});
+  const selectEnd = useRef({x: 0, y: 0});
+  const lastMouse = useRef({x: 0, y: 0});
+  const animFrame = useRef(null);
+  const scale = 0.2;
+
+  // Coordinate helpers
+  const worldToScreen = (wx, wz, width, height) => {
+    const cx = width / 2, cy = height / 2;
+    const sx = ((wx - offsetX) * zoom * scale) + cx;
+    const sy = ((wz - offsetY) * zoom * scale) + cy;
+    return [sx, sy];
+  };
+
+  const screenToWorld = (sx, sy, width, height) => {
+    const cx = width / 2, cy = height / 2;
+    const wx = (sx - cx) / (zoom * scale) + offsetX;
+    const wz = (sy - cy) / (zoom * scale) + offsetY;
+    return [wx, wz];
+  };
+
+  // Enhanced draw function with particle effects
+  const draw = () => {
+    const canvas = canvasRef.current;
+    const minimap = minimapRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height;
+    
+    // Animated gradient background
+    const time = Date.now() / 1000;
+    const gradient = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.max(w, h));
+    gradient.addColorStop(0, `rgba(13, 17, 23, ${0.9 + Math.sin(time) * 0.1})`);
+    gradient.addColorStop(1, "#0d1117");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+
+    // Animated grid
+    const gridOpacity = Math.min(0.3, zoom * 0.2);
+    ctx.strokeStyle = `rgba(88, 166, 255, ${gridOpacity * 0.3})`;
+    ctx.lineWidth = 1;
+    
+    // Major grid lines with glow
+    const step = 100;
+    for (let gx = -1000; gx <= 1000; gx += step) {
+      const [sx1, sy1] = worldToScreen(gx, -1000, w, h);
+      const [sx2, sy2] = worldToScreen(gx, 1000, w, h);
+      
+      if (gx === 0) {
+        ctx.strokeStyle = `rgba(88, 166, 255, ${gridOpacity})`;
+        ctx.lineWidth = 2;
+      } else {
+        ctx.strokeStyle = `rgba(88, 166, 255, ${gridOpacity * 0.3})`;
+        ctx.lineWidth = 1;
+      }
+      
+      ctx.beginPath();
+      ctx.moveTo(sx1, sy1);
+      ctx.lineTo(sx2, sy2);
+      ctx.stroke();
+    }
+    
+    for (let gz = -1000; gz <= 1000; gz += step) {
+      const [sx1, sy1] = worldToScreen(-1000, gz, w, h);
+      const [sx2, sy2] = worldToScreen(1000, gz, w, h);
+      
+      if (gz === 0) {
+        ctx.strokeStyle = `rgba(88, 166, 255, ${gridOpacity})`;
+        ctx.lineWidth = 2;
+      } else {
+        ctx.strokeStyle = `rgba(88, 166, 255, ${gridOpacity * 0.3})`;
+        ctx.lineWidth = 1;
+      }
+      
+      ctx.beginPath();
+      ctx.moveTo(sx1, sy1);
+      ctx.lineTo(sx2, sy2);
+      ctx.stroke();
+    }
+
+    // Origin with pulsing effect
+    const [ox, oy] = worldToScreen(0, 0, w, h);
+    const pulseSize = 10 + Math.sin(time * 3) * 5;
+    
+    ctx.fillStyle = `rgba(88, 166, 255, ${0.2 + Math.sin(time * 3) * 0.1})`;
+    ctx.beginPath();
+    ctx.arc(ox, oy, pulseSize, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    ctx.strokeStyle = "rgba(88, 166, 255, 0.5)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ox, oy, pulseSize, 0, 2 * Math.PI);
+    ctx.stroke();
+
+    // Draw bot paths
+    bots.forEach(b => {
+      if (b.path && b.path.length > 1) {
+        ctx.strokeStyle = `rgba(88, 166, 255, 0.3)`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        
+        for (let i = 0; i < b.path.length; i++) {
+          const [px, py] = worldToScreen(b.path[i][0], b.path[i][2], w, h);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    });
+
+    // Draw bots with enhanced effects
+    bots.forEach(b => {
+      const [sx, sy] = worldToScreen(b.position[0], b.position[2], w, h);
+      
+      // Bot glow effect
+      if (b.status === "BUSY") {
+        const glowGradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, 30);
+        glowGradient.addColorStop(0, `rgba(88, 166, 255, ${0.3 + Math.sin(time * 4) * 0.1})`);
+        glowGradient.addColorStop(1, "rgba(88, 166, 255, 0)");
+        ctx.fillStyle = glowGradient;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 30, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      
+      // Bot shadow
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.beginPath();
+      ctx.arc(sx + 3, sy + 3, 14, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // Bot icon
+      ctx.font = "26px serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      
+      if (b.status === "BUSY") {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#58a6ff";
+        ctx.fillStyle = "#58a6ff";
+      } else {
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = "rgba(88, 166, 255, 0.5)";
+        ctx.fillStyle = "#7d8590";
+      }
+      
+      ctx.fillText("🤖", sx, sy);
+      ctx.shadowBlur = 0;
+      
+      // Selection indicator
+      if (selectedIds.includes(b.id)) {
+        ctx.strokeStyle = "#ffd700";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 20 + Math.sin(time * 4) * 2, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Selection glow
+        const selectGlow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 25);
+        selectGlow.addColorStop(0, "rgba(255, 215, 0, 0.2)");
+        selectGlow.addColorStop(1, "rgba(255, 215, 0, 0)");
+        ctx.fillStyle = selectGlow;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 25, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      
+      // Bot label with background
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      ctx.fillRect(sx - 30, sy + 20, 60, 16);
+      
+      ctx.fillStyle = "rgba(230, 237, 243, 0.9)";
+      ctx.font = "11px sans-serif";
+      ctx.fillText(b.id, sx, sy + 28);
+    });
+
+    // Draw move target with animation
+    if (selectedCommand === "move_to" && moveTarget) {
+      const [sx, sy] = worldToScreen(moveTarget.x, moveTarget.z, w, h);
+      
+      // Animated rings
+      for (let i = 0; i < 3; i++) {
+        const offset = (time * 2 + i * 0.5) % 3;
+        const alpha = Math.max(0, 1 - offset / 3);
+        const size = 15 + offset * 20;
+        
+        ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sx, sy, size, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+      
+      // Crosshair
+      ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
+      ctx.lineWidth = 2;
+      const armLength = 25;
+      
+      ctx.beginPath();
+      ctx.moveTo(sx - armLength, sy);
+      ctx.lineTo(sx - 10, sy);
+      ctx.moveTo(sx + 10, sy);
+      ctx.lineTo(sx + armLength, sy);
+      ctx.moveTo(sx, sy - armLength);
+      ctx.lineTo(sx, sy - 10);
+      ctx.moveTo(sx, sy + 10);
+      ctx.lineTo(sx, sy + armLength);
+      ctx.stroke();
+      
+      // Center dot
+      ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
+      ctx.beginPath();
+      ctx.arc(sx, sy, 3, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // Coordinates label
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(sx - 40, sy + 30, 80, 18);
+      
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.font = "12px monospace";
+      ctx.fillText(`(${moveTarget.x}, ${moveTarget.z})`, sx, sy + 42);
+    }
+
+    // Draw selection box
+    if (isSelecting.current) {
+      ctx.strokeStyle = "rgba(88, 166, 255, 0.5)";
+      ctx.fillStyle = "rgba(88, 166, 255, 0.1)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      
+      const x = Math.min(selectStart.current.x, selectEnd.current.x);
+      const y = Math.min(selectStart.current.y, selectEnd.current.y);
+      const width = Math.abs(selectEnd.current.x - selectStart.current.x);
+      const height = Math.abs(selectEnd.current.y - selectStart.current.y);
+      
+      ctx.fillRect(x, y, width, height);
+      ctx.strokeRect(x, y, width, height);
+      ctx.setLineDash([]);
+    }
+
+    // Draw minimap
+    if (minimap) {
+      const mctx = minimap.getContext("2d");
+      const mw = minimap.width, mh = minimap.height;
+      
+      // Minimap background
+      mctx.fillStyle = "rgba(13, 17, 23, 0.9)";
+      mctx.fillRect(0, 0, mw, mh);
+      
+      // Minimap grid
+      mctx.strokeStyle = "rgba(88, 166, 255, 0.1)";
+      mctx.lineWidth = 1;
+      mctx.beginPath();
+      mctx.moveTo(mw/2, 0);
+      mctx.lineTo(mw/2, mh);
+      mctx.moveTo(0, mh/2);
+      mctx.lineTo(mw, mh/2);
+      mctx.stroke();
+      
+      // Draw bots on minimap
+      const minimapScale = 0.15;
+      bots.forEach(b => {
+        const mx = (b.position[0] * minimapScale) + mw/2;
+        const my = (b.position[2] * minimapScale) + mh/2;
+        
+        mctx.fillStyle = b.status === "BUSY" ? "#58a6ff" : "#7d8590";
+        mctx.beginPath();
+        mctx.arc(mx, my, 3, 0, 2 * Math.PI);
+        mctx.fill();
+        
+        if (selectedIds.includes(b.id)) {
+          mctx.strokeStyle = "#ffd700";
+          mctx.lineWidth = 2;
+          mctx.beginPath();
+          mctx.arc(mx, my, 5, 0, 2 * Math.PI);
+          mctx.stroke();
+        }
+      });
+      
+      // Draw viewport on minimap
+      mctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+      mctx.lineWidth = 2;
+      const viewSize = 50 / zoom;
+      const viewX = (offsetX * minimapScale) + mw/2 - viewSize/2;
+      const viewY = (offsetY * minimapScale) + mh/2 - viewSize/2;
+      mctx.strokeRect(viewX, viewY, viewSize, viewSize);
+    }
+  };
+
+  // Animation loop
+  useEffect(() => {
+    const animate = () => {
+      draw();
+      animFrame.current = requestAnimationFrame(animate);
+    };
+    animate();
+    return () => {
+      if (animFrame.current) {
+        cancelAnimationFrame(animFrame.current);
+      }
+    };
+  }, [bots, selectedIds, offsetX, offsetY, zoom, selectedCommand, moveTarget]);
+
+  // Canvas resize
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const minimap = minimapRef.current;
+    
+    const resize = () => {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+      if (minimap) {
+        minimap.width = minimap.clientWidth;
+        minimap.height = minimap.clientHeight;
+      }
+    };
+    
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  // Mouse events with multi-select support
+  const onDown = e => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    if (e.shiftKey) {
+      isSelecting.current = true;
+      selectStart.current = {x, y};
+      selectEnd.current = {x, y};
+    } else {
+      isPanning.current = true;
+      lastMouse.current = {x: e.clientX, y: e.clientY};
+      canvasRef.current.style.cursor = "grabbing";
+    }
+  };
+
+  const onMove = e => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    if (isSelecting.current) {
+      selectEnd.current = {x, y};
+    } else if (isPanning.current) {
+      const dx = e.clientX - lastMouse.current.x;
+      const dy = e.clientY - lastMouse.current.y;
+      setView(v => ({
+        ...v,
+        offsetX: v.offsetX - dx / (v.zoom * scale),
+        offsetY: v.offsetY - dy / (v.zoom * scale)
+      }));
+      lastMouse.current = {x: e.clientX, y: e.clientY};
+    }
+  };
+
+  const onUp = e => {
+    if (isSelecting.current) {
+      // Calculate selected bots
+      const rect = canvasRef.current.getBoundingClientRect();
+      const selected = [];
+      
+      const minX = Math.min(selectStart.current.x, selectEnd.current.x);
+      const maxX = Math.max(selectStart.current.x, selectEnd.current.x);
+      const minY = Math.min(selectStart.current.y, selectEnd.current.y);
+      const maxY = Math.max(selectStart.current.y, selectEnd.current.y);
+      
+      bots.forEach(b => {
+        const [sx, sy] = worldToScreen(b.position[0], b.position[2], canvasRef.current.width, canvasRef.current.height);
+        if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
+          selected.push(b.id);
+        }
+      });
+      
+      if (selected.length > 0) {
+        onMultiSelect(selected);
+      }
+      
+      isSelecting.current = false;
+    } else {
+      isPanning.current = false;
+      canvasRef.current.style.cursor = selectedCommand === "move_to" ? "crosshair" : "grab";
+    }
+  };
+
+  const onWheel = e => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 1.1 : 0.9;
+    setView(v => ({...v, zoom: Math.max(0.2, Math.min(20, v.zoom * delta))}));
+  };
+
+  const onClick = e => {
+    if (e.shiftKey) return; // Don't handle click during selection
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const [wx, wz] = screenToWorld(
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+      canvasRef.current.width,
+      canvasRef.current.height
+    );
+    
+    let closest = null, min = 30 / scale / zoom;
+    bots.forEach(b => {
+      const d = Math.hypot(b.position[0] - wx, b.position[2] - wz);
+      if (d < min) {
+        min = d;
+        closest = b;
+      }
+    });
+    
+    if (closest) {
+      if (e.ctrlKey) {
+        // Add to selection
+        if (selectedIds.includes(closest.id)) {
+          onMultiSelect(selectedIds.filter(id => id !== closest.id));
+        } else {
+          onMultiSelect([...selectedIds, closest.id]);
+        }
+      } else {
+        onSelect(closest.id);
+      }
+    } else if (selectedCommand === "move_to") {
+      onMoveTargetChange({x: Math.round(wx), y: 64, z: Math.round(wz)});
+    }
+  };
+
+  return (
+    <>
+      <canvas
+        id="bot-canvas"
+        ref={canvasRef}
+        style={{cursor: selectedCommand === "move_to" ? "crosshair" : "grab"}}
+        onMouseDown={onDown}
+        onMouseMove={onMove}
+        onMouseUp={onUp}
+        onMouseLeave={onUp}
+        onWheel={onWheel}
+        onClick={onClick}
+      />
+      <canvas
+        id="minimap"
+        ref={minimapRef}
+      />
+    </>
+  );
+}
+
+/* ──────────────────────── ENHANCED UNIT SELECTION ──────────── */
+function UnitSelection({bots, selectedIds, onSelect, onMultiSelect}) {
+  const selectAll = () => {
+    onMultiSelect(bots.map(b => b.id));
+  };
+
+  const deselectAll = () => {
+    onMultiSelect([]);
+  };
+
+  return (
+    <>
+      <button 
+        className="select-all-btn" 
+        onClick={selectedIds.length === bots.length ? deselectAll : selectAll}
+      >
+        {selectedIds.length === bots.length ? "Deselect All" : "Select All"}
+      </button>
+      <div className="unit-list">
+        {bots.map(b => {
+          const icon = b.status === "BUSY" ? "⚡" : "💤";
+          const isSelected = selectedIds.includes(b.id);
+          
+          return (
+            <button
+              key={b.id}
+              className={`unit-btn ${isSelected ? "selected" : ""}`}
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  if (isSelected) {
+                    onMultiSelect(selectedIds.filter(id => id !== b.id));
+                  } else {
+                    onMultiSelect([...selectedIds, b.id]);
+                  }
+                } else if (e.shiftKey && selectedIds.length > 0) {
+                  // Range selection
+                  const firstIdx = bots.findIndex(bot => bot.id === selectedIds[0]);
+                  const currentIdx = bots.findIndex(bot => bot.id === b.id);
+                  const start = Math.min(firstIdx, currentIdx);
+                  const end = Math.max(firstIdx, currentIdx);
+                  const range = bots.slice(start, end + 1).map(bot => bot.id);
+                  onMultiSelect(range);
+                } else {
+                  onSelect(b.id);
+                }
+              }}
+            >
+              <div className="unit-info">
+                <span className="unit-icon">{icon}</span>
+                <div className="unit-details">
+                  <div className="unit-name">{b.id}</div>
+                  <div className="unit-coords">
+                    {b.position[0]}, {b.position[1]}, {b.position[2]}
+                  </div>
+                </div>
+              </div>
+              <span className="bot-status-icon">{b.status === "BUSY" ? "🔄" : "✓"}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/* ──────────────────────── ENHANCED COMMAND CENTER ──────────── */
+function CommandCenter({bots, selectedIds, onSend, selectedCommand, onCommandChange, moveTarget, onMoveTargetChange}) {
+  const [commandQueue, setCommandQueue] = useState([]);
+  const [activeTab, setActiveTab] = useState("basic");
+  
+  const selectedBots = bots.filter(b => selectedIds.includes(b.id));
+  const disabled = selectedBots.length === 0;
+
+  const exec = () => {
+    if (disabled) return;
+    
+    selectedBots.forEach(bot => {
+      if (selectedCommand === "move_to") {
+        if (!moveTarget) {
+          alert("Please set target coordinates or click on the map");
+          return;
+        }
+        const cmd = {
+          type: "command",
+          cmd: "move_to",
+          bot_id: bot.index,
+          parameters: {target: [moveTarget.x, moveTarget.y, moveTarget.z]}
+        };
+        onSend(cmd);
+        setCommandQueue(q => [...q, {bot: bot.id, cmd: "move_to", target: moveTarget}]);
+      } else if (selectedCommand === "cancel_job") {
+        onSend({type: "cancel_job", bot_id: bot.index});
+      } else {
+        onSend({type: "command", cmd: "status", bot_id: bot.index});
+      }
+    });
+    
+    // Clear queue after execution
+    setTimeout(() => setCommandQueue([]), 3000);
+  };
+
+  const quickMove = (dx, dy, dz) => {
+    selectedBots.forEach(bot => {
+      const newTarget = {
+        x: bot.position[0] + dx,
+        y: bot.position[1] + dy,
+        z: bot.position[2] + dz
+      };
+      onSend({
+        type: "command",
+        cmd: "move_to",
+        bot_id: bot.index,
+        parameters: {target: [newTarget.x, newTarget.y, newTarget.z]}
+      });
+    });
+  };
+
+  return (
+    <React.Fragment>
+      <div className="bot-info">
+        {selectedBots.length > 0 ? (
+          selectedBots.length === 1 ? (
+            <div className="bot-info-grid">
+              <div className="bot-info-item">
+                <span className="bot-info-label">Unit ID</span>
+                <span className="bot-info-value">{selectedBots[0].id}</span>
+              </div>
+              <div className="bot-info-item">
+                <span className="bot-info-label">Status</span>
+                <span className="bot-info-value" style={{color: selectedBots[0].status === "BUSY" ? "#2ea043" : "#e3b341"}}>
+                  {selectedBots[0].status}
+                </span>
+              </div>
+              <div className="bot-info-item">
+                <span className="bot-info-label">Position</span>
+                <span className="bot-info-value">{selectedBots[0].position.map(p => p.toFixed(1)).join(", ")}</span>
+              </div>
+              <div className="bot-info-item">
+                <span className="bot-info-label">Current Job</span>
+                <span className="bot-info-value">{selectedBots[0].currentJob}</span>
+              </div>
+            </div>
+          ) : (
+            <div style={{textAlign: "center"}}>
+              <div className="bot-info-label">Multiple Units Selected</div>
+              <div className="bot-info-value" style={{fontSize: "24px", marginTop: "8px"}}>
+                {selectedBots.length} Bots
+              </div>
+              <div style={{marginTop: "8px", fontSize: "12px", color: "#7d8590"}}>
+                {selectedBots.filter(b => b.status === "BUSY").length} busy, {selectedBots.filter(b => b.status === "IDLE").length} idle
+              </div>
+            </div>
+          )
+        ) : (
+          <div style={{textAlign: "center", color: "#7d8590", padding: "20px"}}>
+            No units selected
+          </div>
+        )}
+      </div>
+
+      <div className="command-tabs">
+        <button 
+          className={`tab-btn ${activeTab === "basic" ? "active" : ""}`}
+          onClick={() => setActiveTab("basic")}
+        >
+          <span>⚙️</span> Basic
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === "quick" ? "active" : ""}`}
+          onClick={() => setActiveTab("quick")}
+        >
+          <span>⚡</span> Quick
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === "advanced" ? "active" : ""}`}
+          onClick={() => setActiveTab("advanced")}
+        >
+          <span>🎯</span> Advanced
+        </button>
+      </div>
+
+      {activeTab === "basic" && (
+        <>
+          <div className="command-grid">
+            <button 
+              className={`cmd-btn ${selectedCommand === "move_to" ? "active" : ""}`}
+              onClick={() => onCommandChange("move_to")}
+              title="Move to position"
+            >
+              <span className="cmd-icon">🎯</span>
+              <span>Move</span>
+            </button>
+            <button 
+              className={`cmd-btn ${selectedCommand === "cancel_job" ? "active" : ""}`}
+              onClick={() => onCommandChange("cancel_job")}
+              title="Cancel current job"
+            >
+              <span className="cmd-icon">⛔</span>
+              <span>Cancel</span>
+            </button>
+            <button 
+              className={`cmd-btn ${selectedCommand === "query" ? "active" : ""}`}
+              onClick={() => onCommandChange("query")}
+              title="Query bot status"
+            >
+              <span className="cmd-icon">📊</span>
+              <span>Query</span>
+            </button>
+          </div>
+
+          {selectedCommand === "move_to" && (
+            <div className="coord-inputs">
+              <div className="coord-input-wrapper">
+                <label className="coord-label">X</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={(moveTarget && moveTarget.x) || ""}
+                  onChange={e => onMoveTargetChange({
+                    x: parseInt(e.target.value) || 0,
+                    y: (moveTarget && moveTarget.y) || 64,
+                    z: (moveTarget && moveTarget.z) || 0
+                  })}
+                />
+              </div>
+              <div className="coord-input-wrapper">
+                <label className="coord-label">Y</label>
+                <input
+                  type="number"
+                  placeholder="64"
+                  value={(moveTarget && moveTarget.y) || ""}
+                  onChange={e => onMoveTargetChange({
+                    x: (moveTarget && moveTarget.x) || 0,
+                    y: parseInt(e.target.value) || 0,
+                    z: (moveTarget && moveTarget.z) || 0
+                  })}
+                />
+              </div>
+              <div className="coord-input-wrapper">
+                <label className="coord-label">Z</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={(moveTarget && moveTarget.z) || ""}
+                  onChange={e => onMoveTargetChange({
+                    x: (moveTarget && moveTarget.x) || 0,
+                    y: (moveTarget && moveTarget.y) || 64,
+                    z: parseInt(e.target.value) || 0
+                  })}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === "quick" && (
+        <div className="command-grid">
+          <button className="cmd-btn" onClick={() => quickMove(10, 0, 0)} title="Move East">
+            <span className="cmd-icon">➡️</span>
+            <span>East</span>
+          </button>
+          <button className="cmd-btn" onClick={() => quickMove(-10, 0, 0)} title="Move West">
+            <span className="cmd-icon">⬅️</span>
+            <span>West</span>
+          </button>
+          <button className="cmd-btn" onClick={() => quickMove(0, 0, 10)} title="Move South">
+            <span className="cmd-icon">⬇️</span>
+            <span>South</span>
+          </button>
+          <button className="cmd-btn" onClick={() => quickMove(0, 0, -10)} title="Move North">
+            <span className="cmd-icon">⬆️</span>
+            <span>North</span>
+          </button>
+          <button className="cmd-btn" onClick={() => quickMove(0, 10, 0)} title="Move Up">
+            <span className="cmd-icon">🔺</span>
+            <span>Up</span>
+          </button>
+          <button className="cmd-btn" onClick={() => quickMove(0, -10, 0)} title="Move Down">
+            <span className="cmd-icon">🔻</span>
+            <span>Down</span>
+          </button>
+        </div>
+      )}
+
+      {activeTab === "advanced" && (
+        <div style={{padding: "12px", textAlign: "center", color: "#7d8590"}}>
+          Advanced commands coming soon...
+        </div>
+      )}
+
+      <button id="exec-btn" onClick={exec} disabled={disabled}>
+        {disabled ? "Select Units" : `Execute (${selectedBots.length} bot${selectedBots.length !== 1 ? 's' : ''})`}
+      </button>
+
+      {commandQueue.length > 0 && (
+        <div className="command-queue">
+          <div className="queue-header">
+            <span>📋</span> Command Queue
+          </div>
+          {commandQueue.slice(0, 3).map((item, i) => (
+            <div key={i} className="queue-item">
+              <span className="queue-item-cmd">{item.bot}</span>
+              <span className="queue-item-target">{item.cmd} → ({(item.target && item.target.x)}, {(item.target && item.target.z)})</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="recent-activity">
+        <span className="activity-icon">📝</span>
+        {selectedBots.length > 0 ? 
+          `Last: ${selectedBots[0].lastLog}` : 
+          "No activity"
+        }
+      </div>
+    </React.Fragment>
+  );
+}
+
+/* ──────────────────────── ENHANCED TASK PANEL ────────────────── */
+function TaskPanel({stats}) {
+  const pct = Math.round((stats.completedBlocks / stats.totalBlocks) * 100);
+  
+  return (
+    <div id="task-panel">
+      <div className="task-header">
+        <div className="task-header-icon">📊</div>
+        <span>Task Progress</span>
+      </div>
+      
+      <div className="progress-container">
+        <div className="progress-bar">
+          <div className="progress-fill" style={{width: `${pct}%`}}></div>
+        </div>
+        <div className="progress-text">
+          <span>{stats.completedBlocks} / {stats.totalBlocks} blocks</span>
+          <span>{pct}%</span>
+        </div>
+      </div>
+      
+      <div className="task-status">
+        <span>Task Status:</span>
+        <span className={`status-badge ${stats.isRunning ? "status-running" : "status-stopped"}`}>
+          <span>{stats.isRunning ? "⚡" : "⏸️"}</span>
+          {stats.isRunning ? "Running" : "Stopped"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────── KEYBOARD SHORTCUTS PANEL ──────────── */
+function ShortcutsPanel({visible}) {
+  return (
+    <div id="shortcuts-panel" className={visible ? "visible" : ""}>
+      <div style={{marginBottom: "8px", fontWeight: "600", color: "#58a6ff"}}>Keyboard Shortcuts</div>
+      <div className="shortcut-item">
+        <span>Select All</span>
+        <span className="shortcut-key">Ctrl+A</span>
+      </div>
+      <div className="shortcut-item">
+        <span>Multi-select</span>
+        <span className="shortcut-key">Ctrl+Click</span>
+      </div>
+      <div className="shortcut-item">
+        <span>Range select</span>
+        <span className="shortcut-key">Shift+Click</span>
+      </div>
+      <div className="shortcut-item">
+        <span>Box select</span>
+        <span className="shortcut-key">Shift+Drag</span>
+      </div>
+      <div className="shortcut-item">
+        <span>Execute</span>
+        <span className="shortcut-key">Enter</span>
+      </div>
+      <div className="shortcut-item">
+        <span>Cancel</span>
+        <span className="shortcut-key">Esc</span>
+      </div>
+      <div className="shortcut-item">
+        <span>Show help</span>
+        <span className="shortcut-key">H</span>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────── ENHANCED LOG PANEL ─────────────────── */
+function LogPanel({logs}) {
+  const [filter, setFilter] = useState("all");
+  
+  const filteredLogs = useMemo(() => {
+    if (filter === "all") return logs;
+    return logs.filter(log => log.type === filter);
+  }, [logs, filter]);
+
+  return (
+    <>
+      <div className="log-filters">
+        <button 
+          className={`filter-btn ${filter === "all" ? "active" : ""}`}
+          onClick={() => setFilter("all")}
+        >
+          All
+        </button>
+        <button 
+          className={`filter-btn ${filter === "info" ? "active" : ""}`}
+          onClick={() => setFilter("info")}
+        >
+          Info
+        </button>
+        <button 
+          className={`filter-btn ${filter === "success" ? "active" : ""}`}
+          onClick={() => setFilter("success")}
+        >
+          Success
+        </button>
+        <button 
+          className={`filter-btn ${filter === "error" ? "active" : ""}`}
+          onClick={() => setFilter("error")}
+        >
+          Error
+        </button>
+      </div>
+      <div id="log">
+        {filteredLogs.map((log, i) => (
+          <div key={i} className={`log-entry ${log.type}`}>
+            <span className="log-time">{log.time}</span>
+            {log.text}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ──────────────────────── NOTIFICATION SYSTEM ────────────────── */
+function Notification({notification, onClose}) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [notification, onClose]);
+
+  if (!notification) return null;
+
+  return (
+    <div className={`notification ${notification.type}`}>
+      <span className="notification-icon">
+        {notification.type === "success" ? "✅" : "❌"}
+      </span>
+      <div className="notification-content">
+        <div className="notification-title">{notification.title}</div>
+        <div className="notification-message">{notification.message}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────── MAIN APP ─────────────────────────── */
+function App() {
+  const [bots, setBots] = useState({});
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [stats, setStats] = useState({
+    startTime: Date.now(),
+    workerCount: 0,
+    totalBlocks: 85,
+    completedBlocks: 0,
+    isRunning: true,
+    efficiency: 100
+  });
+  const [selectedCommand, setSelectedCommand] = useState("move_to");
+  const [moveTarget, setMoveTarget] = useState(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const startTimeRef = useRef(Date.now());
+  
+  // WebSocket connection
+  const {status: connStatus, lastMessage, send} = useWebSocket("ws://localhost:8080");
+
+  // Process WebSocket messages
+  useEffect(() => {
+    if (!lastMessage) return;
+    
+    console.log("Received:", lastMessage);
+    
+    if (lastMessage.type === "status_response_all") {
+      setBots(prev => {
+        const clone = {...prev};
+        Object.entries(lastMessage.bots).forEach(([id, data]) => {
+          const idx = parseInt(id, 10);
+          const key = `worker_${idx}`;
+          clone[key] = clone[key] || emptyBot(idx, idx);
+          const b = clone[key];
+          b.status = data.status;
+          b.position = data.result.bot_position;
+          b.currentJob = data.result.current_job;
+        });
+        setStats(s => ({
+          ...s,
+          workerCount: Object.keys(clone).length,
+          efficiency: Math.round(Object.values(clone).filter(b => b.status === "BUSY").length / Object.keys(clone).length * 100) || 100
+        }));
+        return clone;
+      });
+    } else {
+      const botId = lastMessage.bot_id;
+      let txt = "";
+      let logType = "info";
+      
+      if (lastMessage.type === "job_start") {
+        txt = `Bot ${botId} started job: ${lastMessage.command}`;
+        logType = "info";
+      } else if (lastMessage.type === "job_complete") {
+        txt = `Bot ${botId} completed job.`;
+        logType = "success";
+        setStats(s => ({...s, completedBlocks: Math.min(s.totalBlocks, s.completedBlocks + 1)}));
+      } else if (lastMessage.type === "job_failed") {
+        txt = `Bot ${botId} failed job.`;
+        logType = "error";
+      } else if (lastMessage.type === "command_response") {
+        txt = `Command '${lastMessage.cmd}' for Bot ${botId}: ${lastMessage.status}.`;
+        logType = lastMessage.status === "success" ? "success" : "error";
+      } else {
+        txt = JSON.stringify(lastMessage);
+      }
+      
+      setLogs(l => [{
+        time: new Date().toLocaleTimeString(),
+        text: txt,
+        type: logType
+      }, ...l.slice(0, 499)]);
+      
+      setBots(prev => {
+        const key = `worker_${botId}`;
+        if (prev[key]) prev[key] = {...prev[key], lastLog: txt};
+        return {...prev};
+      });
+    }
+  }, [lastMessage]);
+
+  // Elapsed time
+  const [elapsed, setElapsed] = useState("0:00");
+  useEffect(() => {
+    const id = setInterval(() => {
+      const diff = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setElapsed(`${Math.floor(diff / 60)}:${(diff % 60).toString().padStart(2, "0")}`);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.key === "h" || e.key === "H") {
+        setShowShortcuts(!showShortcuts);
+      } else if (e.key === "Escape") {
+        setSelectedIds([]);
+        setSelectedCommand(null);
+      } else if (e.key === "Enter") {
+        // Execute command
+        const execBtn = document.getElementById("exec-btn");
+        if (execBtn && !execBtn.disabled) {
+          execBtn.click();
+        }
+      } else if (e.ctrlKey && e.key === "a") {
+        e.preventDefault();
+        setSelectedIds(Object.keys(bots));
+      }
+    };
+
+    window.addEventListener("keypress", handleKeyPress);
+    return () => window.removeEventListener("keypress", handleKeyPress);
+  }, [bots, showShortcuts]);
+
+  // Send command with notification
+  const sendCmd = useCallback((cmd) => {
+    if (send(cmd)) {
+      console.log("Sending:", cmd);
+      setNotification({
+        type: "success",
+        title: "Command Sent",
+        message: `${cmd.cmd || cmd.type} executed`
+      });
+    } else {
+      setNotification({
+        type: "error",
+        title: "Connection Error",
+        message: "WebSocket not connected"
+      });
+    }
+  }, [send]);
+
+  const botArray = Object.values(bots);
+  const selectedBots = botArray.filter(b => selectedIds.includes(b.id));
+
+  return (
+    <React.Fragment>
+      <TopBar
+        elapsed={elapsed}
+        stats={stats}
+        connStatus={connStatus}
+      />
+      <div id="main">
+        <div id="canvas-zone">
+          <MapCanvas
+            bots={botArray}
+            selectedIds={selectedIds}
+            onSelect={(id) => setSelectedIds([id])}
+            onMultiSelect={setSelectedIds}
+            selectedCommand={selectedCommand}
+            moveTarget={moveTarget}
+            onMoveTargetChange={setMoveTarget}
+          />
+          <TaskPanel stats={stats} />
+          <ShortcutsPanel visible={showShortcuts} />
+        </div>
+
+        <div id="bottom-panel">
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-header-icon">🤖</div>
+              <span>Unit Selection</span>
+            </div>
+            <UnitSelection
+              bots={botArray}
+              selectedIds={selectedIds}
+              onSelect={(id) => setSelectedIds([id])}
+              onMultiSelect={setSelectedIds}
+            />
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-header-icon">🎮</div>
+              <span>Command Center</span>
+            </div>
+            <CommandCenter
+              bots={botArray}
+              selectedIds={selectedIds}
+              onSend={sendCmd}
+              selectedCommand={selectedCommand}
+              onCommandChange={setSelectedCommand}
+              moveTarget={moveTarget}
+              onMoveTargetChange={setMoveTarget}
+            />
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-header-icon">📜</div>
+              <span>System Log</span>
+            </div>
+            <LogPanel logs={logs} />
+          </div>
+        </div>
+      </div>
+      
+      <Notification 
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
+    </React.Fragment>
+  );
+}
+
+/* ──────────────────────── RENDER ──────────────────────────── */
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
