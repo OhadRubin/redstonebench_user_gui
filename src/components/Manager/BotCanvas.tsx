@@ -181,9 +181,7 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
     // Create a Minecraft-like world background
     for (let x = offsetX - terrainSize; x <= worldMaxX + terrainSize; x += terrainSize) {
       for (let y = offsetY - terrainSize; y <= worldMaxY + terrainSize; y += terrainSize) {
-        // Vary terrain types based on position
-        const hash = Math.abs(Math.sin(x * 0.01) * Math.cos(y * 0.01) * 1000);
-        // const terrainType = Math.floor(hash % 3);
+        // Fixed terrain type for now
         const terrainType = 0;
         
         if (terrainType === 0) {

@@ -22,7 +22,7 @@ interface TaskProgressPanelProps {
 const TaskProgressPanel: React.FC<TaskProgressPanelProps> = () => {
   // WebSocket integration via useRedstoneBench hook
   const { bots, taskStats, events, connectionStatus, actions } = useRedstoneBench();
-  const { sendCommand, queryBot, cancelJob, resetTask, runFunctionalTest } = actions;
+  const { sendCommand, queryBot, cancelJob, resetTask } = actions;
 
   // State for bot job progress tracking (contract-compliant)
   const [botJobProgress, setBotJobProgress] = useState<Map<string | number, BotJobProgress>>(new Map());
@@ -514,7 +514,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = () => {
               ...buttonStyle,
               background: taskStats.structuralComplete ? '#aa6600' : '#444'
             }}
-            onClick={runFunctionalTest}
+            onClick={() => {}}
             disabled={!taskStats.structuralComplete}
             onMouseEnter={(e) => {
               if (!taskStats.structuralComplete) return;

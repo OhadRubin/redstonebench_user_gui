@@ -394,7 +394,7 @@ function App() {
       {/* Contextual Blueprint Viewer */}
       <BlueprintViewer
         completedBlocks={completedBlocks}
-        onRegionSelect={actions.selectBlueprintRegion}
+        onRegionSelect={() => {}} 
         isOpen={isBlueprintOpen}
         onClose={() => setIsBlueprintOpen(false)}
       />
