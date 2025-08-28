@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>RedstoneBench HCI</title>
+
+<!-- React 18 UMD & Babel -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script crossorigin src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+<style>
+/* ─── design tokens ─────────────────────────────────────────── */
+:root{
+  --clr-bg        :#0d1117;
+  --clr-surface   :#161b22;
+  --clr-text      :#e6edf3;
+  --clr-accent    :#1f6feb;
+  --clr-success   :#2ea043;
+  --clr-warning   :#e3b341;
+  --clr-error     :#f85149;
+  --clr-grid      :#2d333b;
+  --grid-step     :100;
+  --bot-size      :20;
+  --crosshair-len :20;
+  --radius        :4px;
+  font-family:system-ui,"Segoe UI",sans-serif;
+}
+
+html,body{height:100%;margin:0;background:var(--clr-bg);color:var(--clr-text);}
+
+/* ─── layout ─────────────────────────────────────────────────── */
+#root     {height:100%;display:flex;flex-direction:column}
+#top-bar  {background:var(--clr-accent);padding:.3rem .6rem;font-weight:600;text-align:center;user-select:none}
+#main     {flex:1;display:grid;grid-template-rows:2fr 1fr}
+
+/* flex columns */
+.column{display:flex;flex-direction:column;padding:.4rem;gap:.4rem;overflow:hidden}
+#left-column  {flex:0 0 20%}
+#center-column{flex:0 0 50%}
+#right-column {flex:1}
+
+/* canvas zone */
+#canvas-zone{position:relative;background:var(--clr-bg);overflow:hidden}
+#bot-canvas {display:block;width:100%;height:100%;touch-action:none;}
+
+/* selections / buttons */
+.unit-btn,.cmd-btn,#exec-btn{
+  background:var(--clr-surface);border:0;border-radius:var(--radius);
+  padding:.45rem;text-align:center;color:var(--clr-text);cursor:pointer
+}
+.unit-btn.selected{background:var(--clr-success)}
+.unit-btn:active  {filter:brightness(.9)}
+#exec-btn{background:var(--clr-success);font-weight:600}
+#exec-btn:disabled{background:#30363d;cursor:not-allowed}
+
+/* inputs */
+input[type=number]{
+  background:var(--clr-bg);border:1px solid #30363d;border-radius:var(--radius);
+  padding:.35rem;width:100%;color:var(--clr-text)
+}
+
+/* log */
+#log{
+  flex:1;background:#000;padding:.4rem;overflow-y:auto;
+  font-family:Consolas,monospace;font-size:.75rem;white-space:pre-wrap;color:#79c0ff
+}
+
+/* scrollbars */
+#log::-webkit-scrollbar           {width:8px}
+#log::-webkit-scrollbar-thumb     {background:#30363d;border-radius:var(--radius)}
+#bottom-panel::-webkit-scrollbar  {width:8px}
+
+/* misc */
+.status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+.status.connected   {background:var(--clr-success)}
+.status.connecting  {background:var(--clr-warning)}
+.status.disconnected{background:var(--clr-error)}
+
+#task-panel{
+  position:absolute;top:10px;right:10px;width:220px;
+  padding:.5rem;border:1px solid cyan;background:#0009;border-radius:var(--radius)
+}
+#toast{
+  position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
+  background:#000c;color:var(--clr-text);padding:.6rem 1rem;border-radius:var(--radius);
+  opacity:0;transition:opacity .25s
+}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+
+const {useState,useEffect,useRef,useReducer,useCallback,useMemo} = React;
+
+/* ───────── types / helpers ─────────────────────────────────── */
+const makeBot = (idx)=>({
+  id:`worker_${idx}`,
+  index:idx,
+  position:[0,64,0],
+  status:"IDLE",
+  currentJob:"Idle – awaiting commands",
+  lastLog:"Connected & ready"
+});
+
+const fmtTime = (ms)=>{
+  const s=(ms/1000|0); return `${s/60|0}:${(s%60).toString().padStart(2,"0")}`;
+};
+
+/* ───────── UI snippets ─────────────────────────────────────── */
+const StatusDot=({state})=><span className={`status-dot status ${state}`}></span>;
+
+const TopBar=React.memo(({elapsed,progress,workerCount,conn})=>
+  <div id="top-bar">
+    RedstoneBench HCI | ⏱ {elapsed} | 🔧 {progress} | 👥 {workerCount} | <StatusDot state={conn}/>{conn}
+  </div>
+);
+
+/* ───────── toast (non-blocking alerts) ─────────────────────── */
+function useToast(delay=2000){
+  const [msg,set]=useState("");
+  const timer=useRef();
+  const show = useCallback(text=>{
+    set(text);
+    clearTimeout(timer.current);
+    timer.current=setTimeout(()=>set(""),delay);
+  },[]);
+  const node=<div id="toast" className={msg?"show":""}>{msg}</div>;
+  return [node,show];
+}
+
+/* ───────── canvas map ───────────────────────────────────────── */
+function MapCanvas({bots,selectedId,onSelect,mode,moveTarget,setMoveTarget}){
+  const canvasRef=useRef(null);
+  const view=useRef({x:0,y:0,z:1});          // x/y offset, z zoom
+  const ptr=useRef({down:false,x:0,y:0});
+  const needsDraw=useRef(true);
+
+  /* math helpers */
+  const scale=.2;
+  const w2s=(wx,wz,w,h)=>{
+    const {x:oX,y:oY,z:z}=view.current;
+    const cx=w/2,cy=h/2;
+    return [((wx-oX)*z*scale)+cx,((wz-oY)*z*scale)+cy];
+  };
+  const s2w=(sx,sy,w,h)=>{
+    const {x:oX,y:oY,z:z}=view.current;
+    const cx=w/2,cy=h/2;
+    return [(sx-cx)/(z*scale)+oX,(sy-cy)/(z*scale)+oY];
+  };
+
+  /* draw function */
+  const draw=()=>{
+    const cvs=canvasRef.current;if(!cvs)return;
+    const ctx=cvs.getContext("2d",{alpha:false});
+    const {width:w,height:h}=cvs;
+    ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue("--clr-bg");
+    ctx.fillRect(0,0,w,h);
+
+    /* grid */
+    ctx.strokeStyle="var(--clr-grid)";ctx.lineWidth=1;
+    const step=parseInt(getComputedStyle(document.documentElement).getPropertyValue("--grid-step"),10);
+    for(let gx=-500;gx<=500;gx+=step){
+      const [sx1,sy1]=w2s(gx,-500,w,h);
+      const [sx2,sy2]=w2s(gx, 500,w,h);
+      ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(sx2,sy2);ctx.stroke();
+    }
+    for(let gz=-500;gz<=500;gz+=step){
+      const [sx1,sy1]=w2s(-500,gz,w,h);
+      const [sx2,sy2]=w2s( 500,gz,w,h);
+      ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(sx2,sy2);ctx.stroke();
+    }
+
+    /* bots */
+    bots.forEach(b=>{
+      const [sx,sy]=w2s(b.position[0],b.position[2],w,h);
+      ctx.font="20px serif";ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillStyle=b.status==="BUSY"?"#58a6ff":"#7d8590";
+      ctx.fillText("🤖",sx,sy);
+      if(b.id===selectedId){
+        ctx.strokeStyle:"#d29922";ctx.lineWidth=2;
+        ctx.beginPath();ctx.arc(sx,sy,14,0,2*Math.PI);ctx.stroke();
+      }
+    });
+
+    /* move-to target */
+    if(mode==="move_to" && moveTarget){
+      const [sx,sy]=w2s(moveTarget.x,moveTarget.z,w,h);
+      ctx.strokeStyle="#ff0000";ctx.lineWidth=2;
+      const l=parseInt(getComputedStyle(document.documentElement).getPropertyValue("--crosshair-len"),10);
+      ctx.beginPath();ctx.moveTo(sx-l,sy);ctx.lineTo(sx+l,sy);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(sx,sy-l);ctx.lineTo(sx,sy+l);ctx.stroke();
+    }
+  };
+
+  /* scheduled render loop – only if something marked dirty */
+  useEffect(()=>{
+    const loop=()=>{
+      if(needsDraw.current){needsDraw.current=false;draw();}
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  },[]);
+
+  /* whenever props change flag a redraw */
+  useEffect(()=>{needsDraw.current=true;},[bots,selectedId,mode,moveTarget]);
+
+  /* resize */
+  useEffect(()=>{
+    const cvs=canvasRef.current;
+    const resize=()=>{cvs.width=cvs.clientWidth;cvs.height=cvs.clientHeight;needsDraw.current=true};
+    resize();window.addEventListener("resize",resize);
+    return()=>window.removeEventListener("resize",resize);
+  },[]);
+
+  /* pointer events (mouse + touch) */
+  useEffect(()=>{
+    const cvs=canvasRef.current;
+    const onDown=e=>{
+      ptr.current={down:true,x:e.clientX,y:e.clientY};
+      cvs.setPointerCapture(e.pointerId);
+    };
+    const onMove=e=>{
+      if(!ptr.current.down)return;
+      const dx=e.clientX-ptr.current.x,dy=e.clientY-ptr.current.y;
+      const v=view.current;
+      v.x-=dx/(v.z*scale); v.y-=dy/(v.z*scale); ptr.current.x=e.clientX;ptr.current.y=e.clientY;
+      needsDraw.current=true;
+    };
+    const onUp=()=>{ptr.current.down=false;};
+    const onWheel=e=>{
+      e.preventDefault();
+      const v=view.current;
+      v.z=Math.max(.2,Math.min(5,v.z*(e.deltaY<0?1.1:.9)));
+      needsDraw.current=true;
+    };
+    const onClick=e=>{
+      const rect=cvs.getBoundingClientRect();
+      const [wx,wz]=s2w(e.clientX-rect.left,e.clientY-rect.top,cvs.width,cvs.height);
+      /* check bot hit first */
+      let closest=null,min=30/(view.current.z*scale);
+      bots.forEach(b=>{
+        const d=Math.hypot(b.position[0]-wx,b.position[2]-wz);
+        if(d<min){min=d;closest=b;}
+      });
+      if(closest) onSelect(closest.id);
+      else if(mode==="move_to") setMoveTarget({x:Math.round(wx),y:64,z:Math.round(wz)});
+    };
+    cvs.addEventListener("pointerdown",onDown);
+    cvs.addEventListener("pointermove",onMove);
+    cvs.addEventListener("pointerup",onUp);
+    cvs.addEventListener("pointerleave",onUp);
+    cvs.addEventListener("wheel",onWheel,{passive:false});
+    cvs.addEventListener("click",onClick);
+    return()=>{
+      cvs.removeEventListener("pointerdown",onDown);
+      cvs.removeEventListener("pointermove",onMove);
+      cvs.removeEventListener("pointerup",onUp);
+      cvs.removeEventListener("pointerleave",onUp);
+      cvs.removeEventListener("wheel",onWheel);
+      cvs.removeEventListener("click",onClick);
+    };
+  },[bots,mode]); // bots for hit-test range, mode to know if placing crosshair
+
+  return <canvas id="bot-canvas" ref={canvasRef}/>;
+}
+
+/* ───────── unit list ───────────────────────────────────────── */
+const UnitSelection=React.memo(({bots,sel,onSelect})=>
+  <div style={{overflowY:"auto"}}>
+    {bots.map(b=>
+      <button key={b.id} className={`unit-btn ${sel===b.id?"selected":""}`} onClick={()=>onSelect(b.id)}>
+        {b.id}&nbsp;{b.status==="BUSY"?"⚡":"⏸"}
+      </button>
+    )}
+  </div>
+);
+
+/* ───────── command center ─────────────────────────────────── */
+function CommandCenter({bot,mode,setMode,moveTarget,setMoveTarget,send}){
+
+  const exec=()=>{
+    if(!bot) return;
+    if(mode==="move_to"){
+      if(!moveTarget) return send({kind:"toast",msg:"Pick a target first"});
+      send({type:"command",cmd:"move_to",bot_id:bot.index,parameters:{target:[moveTarget.x,moveTarget.y,moveTarget.z]}});
+    }else if(mode==="cancel_job"){
+      send({type:"command",cmd:"cancel",bot_id:bot.index});
+    }else{
+      send({type:"command",cmd:"status",bot_id:bot.index});
+    }
+  };
+
+  return(
+    <div className="column" style={{height:"100%"}}>
+      <div style={{minHeight:"90px"}}>
+        {bot?
+          <React.Fragment>
+            <strong>{bot.id}</strong><br/>
+            Status: <span style={{color:bot.status==="BUSY"?"var(--clr-success)":"var(--clr-warning)"}}>{bot.status}</span><br/>
+            Pos: {bot.position.join(", ")}<br/>
+            Job: {bot.currentJob}
+          </React.Fragment>
+          :"No unit selected."}
+      </div>
+
+      <div style={{display:"flex",gap:4}}>
+        <button className="unit-btn cmd-btn" onClick={()=>setMode("move_to")}>🚶 Move</button>
+        <button className="unit-btn cmd-btn" onClick={()=>setMode("cancel_job")}>🛑 Cancel</button>
+        <button className="unit-btn cmd-btn" onClick={()=>setMode("query")}>❓ Query</button>
+      </div>
+
+      {mode==="move_to"?
+        <React.Fragment>
+          <input type="number" placeholder="X" value={moveTarget && moveTarget.x !== undefined ? moveTarget.x : ""} onChange={e=>setMoveTarget({...moveTarget,x:+e.target.value||0})}/>
+          <input type="number" placeholder="Y" value={moveTarget && moveTarget.y !== undefined ? moveTarget.y : ""} onChange={e=>setMoveTarget({...moveTarget,y:+e.target.value||0})}/>
+          <input type="number" placeholder="Z" value={moveTarget && moveTarget.z !== undefined ? moveTarget.z : ""} onChange={e=>setMoveTarget({...moveTarget,z:+e.target.value||0})}/>
+        </React.Fragment>:
+        <div style={{height:75,display:"flex",alignItems:"center",justifyContent:"center"}}>No options</div>
+      }
+
+      <button id="exec-btn" onClick={exec} disabled={!bot}>Execute Command</button>
+      <div style={{marginTop:"auto",minHeight:"60px"}}>{bot?`Recent: ${bot.lastLog}`:""}</div>
+    </div>
+  );
+}
+
+/* ───────── task panel ──────────────────────────────────────── */
+const TaskPanel=React.memo(({stats})=>{
+  const pct=stats.totalBlocks?((stats.completedBlocks/stats.totalBlocks)*100|0):0;
+  return(
+    <div id="task-panel">
+      <b>⏱ Task Progress</b><br/>
+      <progress max="100" value={pct}></progress><br/>
+      Status: <span style={{color:stats.isRunning?"var(--clr-success)":"var(--clr-error)"}}>
+        {stats.isRunning?"IN PROGRESS":"STOPPED"}
+      </span>
+    </div>
+  );
+});
+
+/* ───────── WebSocket state machine ─────────────────────────── */
+function useWS(dispatchToast){
+  const [state,setState]=useState("connecting"); // connecting | connected | disconnected
+  const wsRef=useRef(null);
+
+  const send = useCallback(obj=>{
+    if(wsRef.current && wsRef.current.readyState===1){ wsRef.current.send(JSON.stringify(obj)); }
+    else dispatchToast("WebSocket not connected");
+  },[]);
+
+  useEffect(()=>{
+    let ws;
+    const connect=()=>{
+      setState("connecting");
+      ws=new WebSocket("ws://localhost:8080");
+      wsRef.current=ws;
+
+      ws.onopen = () =>{
+        setState("connected");
+        ws.send(JSON.stringify({type:"get_status_all"}));
+      };
+
+      ws.onmessage = e=>{
+        const msg=JSON.parse(e.data);
+        document.dispatchEvent(new CustomEvent("ws_msg",{detail:msg})); // broadcast
+      };
+
+      ws.onclose  = ()=>{setState("disconnected");setTimeout(connect,2000);};
+      ws.onerror  = ()=>ws.close();
+    };
+    connect();
+    return()=>{if(ws) ws.close();};
+  },[]);
+
+  return [state,send];
+}
+
+/* ───────── app reducer ─────────────────────────────────────── */
+function botsReducer(state,action){
+  switch(action.type){
+    case"status_response_all":{
+      const next={...state};
+      Object.entries(action.bots).forEach(([idx,data])=>{
+        const key=`worker_${idx}`;
+        next[key]=next[key]??makeBot(idx);
+        next[key]={...next[key],
+          status:data.status,
+          position:data.result.bot_position,
+          currentJob:data.result.current_job
+        };
+      });
+      return next;
+    }
+    case"log":{
+      if(!state[action.id]) return state;
+      return {...state,[action.id]:{...state[action.id],lastLog:action.msg}};
+    }
+    default:return state;
+  }
+}
+
+/* ───────── main app ────────────────────────────────────────── */
+function App(){
+  const [bots,dispatchBots] = useReducer(botsReducer,{});
+  const [logs,setLogs]      = useState([]);
+  const [stats,setStats]    = useState({totalBlocks:85,completedBlocks:0,isRunning:true});
+  const [selected,setSel]   = useState(null);
+  const [mode,setMode]      = useState("move_to");
+  const [moveTarget,setMoveTarget]=useState(null);
+  const startRef=useRef(Date.now());
+  const [toast,showToast]   = useToast();
+
+  /* WebSocket hook */
+  const [connState,wsSend]  = useWS(showToast);
+
+  /* broadcast listener */
+  useEffect(()=>{
+    const onMsg=e=>{
+      const msg=e.detail;
+      if(msg.type==="status_response_all") dispatchBots(msg);
+      else{
+        const id=`worker_${msg.bot_id}`;
+        const text=msg.type==="command_response" ? `Bot ${id} → ${msg.cmd}: ${msg.status}`
+                  :msg.type==="job_start"        ? `Bot ${id} started ${msg.command}`
+                  :msg.type==="job_complete"     ? `Bot ${id} finished`
+                  :msg.type==="job_failed"       ? `Bot ${id} failed`
+                  :JSON.stringify(msg);
+
+        dispatchBots({type:"log",id,msg:text});
+        setLogs(l=>[`${new Date().toLocaleTimeString()} – ${text}`,...l.slice(0,999)]);
+      }
+    };
+    document.addEventListener("ws_msg",onMsg);
+    return()=>document.removeEventListener("ws_msg",onMsg);
+  },[]);
+
+  /* elapsed timer */
+  const [elapsed,setElapsed]=useState("0:00");
+  useEffect(()=>{
+    const id=setInterval(()=>setElapsed(fmtTime(Date.now()-startRef.current)),1000);
+    return()=>clearInterval(id);
+  },[]);
+
+  const botsArr=useMemo(()=>Object.values(bots),[bots]);
+  const selectedBot=bots[selected]||null;
+
+  /* wrapper so CommandCenter can send toast too */
+  const send = (obj)=>{
+    if(obj.kind==="toast") showToast(obj.msg);
+    else{
+      wsSend(obj);
+      setLogs(l=>[`${new Date().toLocaleTimeString()} – Sent: ${obj.cmd}`,...l]);
+    }
+  };
+
+  return(
+    <React.Fragment>
+      <TopBar elapsed={elapsed}
+              progress={`${stats.completedBlocks}/${stats.totalBlocks}`}
+              workerCount={botsArr.length}
+              conn={connState}/>
+      <div id="main">
+        <div id="canvas-zone">
+          <MapCanvas bots={botsArr} selectedId={selected} onSelect={setSel}
+                     mode={mode} moveTarget={moveTarget} setMoveTarget={setMoveTarget}/>
+          <TaskPanel stats={stats}/>
+        </div>
+        <div id="bottom-panel" style={{display:"flex",overflow:"hidden"}}>
+          <div id="left-column"  className="column"><b>🎯 Unit Selection</b>
+            <UnitSelection bots={botsArr} sel={selected} onSelect={setSel}/>
+          </div>
+          <div id="center-column" className="column"><b>⚙️ Command Center</b>
+            <CommandCenter bot={selectedBot} mode={mode} setMode={setMode}
+                           moveTarget={moveTarget} setMoveTarget={setMoveTarget} send={send}/>
+          </div>
+          <div id="right-column" className="column"><b>🗺️ Log</b><div id="log">{logs.join("\n")}</div></div>
+        </div>
+      </div>
+      {toast}
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
