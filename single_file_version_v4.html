@@ -191,10 +191,22 @@ html, body {
 
 /* ─── Bottom Panel ─────────────────────────── */
 #bottom-panel {
-  display: grid;
-  grid-template-columns: 250px 1fr 350px;
+  display: flex;
   gap: 8px;
-  height: 280px;
+  height: auto;
+  min-height: 280px;
+}
+
+.panel:first-child { 
+  flex: 0 0 250px; 
+}
+
+.panel:nth-child(2) { 
+  flex: 1; 
+}
+
+.panel:last-child { 
+  flex: 0 0 350px; 
 }
 
 .panel {
@@ -398,7 +410,9 @@ input[type="number"]::placeholder {
   background: rgba(0, 0, 0, 0.3);
   border-radius: 8px;
   padding: 12px;
-  overflow-y: auto;
+  overflow: auto;
+  max-height: 200px;
+  scroll-behavior: smooth;
   font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
   font-size: 11px;
   color: #79c0ff;
@@ -700,7 +714,7 @@ function MapCanvas({bots, selectedId, onSelect, selectedCommand, moveTarget, onM
   const onWheel = e => {
     e.preventDefault();
     const delta = e.deltaY < 0 ? 1.1 : 0.9;
-    setView(v => ({...v, zoom: Math.max(0.2, Math.min(5, v.zoom * delta))}));
+    setView(v => ({...v, zoom: Math.max(0.2, Math.min(20, v.zoom * delta))}));
   };
 
   const onClick = e => {
