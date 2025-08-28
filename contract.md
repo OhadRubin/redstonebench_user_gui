@@ -45,6 +45,14 @@ The RedstoneBench WebSocket protocol enables real-time communication between cli
 }
 ```
 
+#### 3. Status Query Messages
+
+```json
+{
+  "type": "get_status_all",
+}
+```
+
 
 
 ### Server-to-Client Messages
@@ -133,6 +141,18 @@ The RedstoneBench WebSocket protocol enables real-time communication between cli
   "bot_id": <bot_id>,
   "success": true,
   "message": "<cancellation_result>"
+}
+```
+
+#### 3. Status Response For All Bots
+
+```json
+{
+  "type": "status_response_all",
+  "bots": {"bot_id": <bot_id>,
+  "status": "IDLE" | "BUSY",
+  "result": {"current_job": "<command-name>",
+              "bot_position": [x, y, z]}}
 }
 ```
 

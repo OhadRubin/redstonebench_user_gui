@@ -69,18 +69,12 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
 
   const queryAllBots = useCallback(() => {
     if (websocket.current?.readyState === WebSocket.OPEN) {
-      // Query each bot individually as per contract (no bulk status query)
-      state.bots.forEach(bot => {
-        const botId = typeof bot.index === 'number' ? bot.index : 0;
-        if (isValidBotId(botId)) {
-          websocket.current?.send(JSON.stringify({
-            type: 'get_status',
-            bot_id: botId
-          }));
-        }
-      });
+      // Use contract-compliant bulk status query
+      websocket.current.send(JSON.stringify({
+        type: 'get_status_all'
+      }));
     }
-  }, [state.bots]);
+  }, []);
 
   const startStatusPolling = useCallback((botIds: number[]) => {
     // Clear any existing polling
@@ -190,6 +184,47 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
                     currentJob: data.result.current_job || (data.status === 'IDLE' ? 'Idle - awaiting commands' : 'Working'),
                     status: data.status === 'BUSY' ? 'BUSY' : 'IDLE',
                     lastActivity: data.result.current_job || 'Connected'
+                  };
+                }
+                return bot;
+              })
+            }));
+          } else if (data.type === 'status_response_all') {
+            // Handle bulk status response per contract
+            if (!data.bots) {
+              console.warn('⚠️ status_response_all missing bots data');
+              return;
+            }
+
+            setState(prev => ({
+              ...prev,
+              bots: prev.bots.map(bot => {
+                // Contract format appears to have bots as object/array - handle both cases
+                let botData = null;
+                if (Array.isArray(data.bots)) {
+                  // If bots is an array, find by bot_id
+                  botData = data.bots.find((b: any) => b.bot_id === bot.index);
+                } else if (typeof data.bots === 'object') {
+                  // If bots is an object, access by bot_id key
+                  botData = data.bots[bot.index] || data.bots[bot.index.toString()];
+                }
+
+                if (botData && botData.result) {
+                  // Keep position as [x,y,z] array format per contract
+                  let position: [number, number, number] = bot.position as [number, number, number];
+                  if (botData.result.bot_position) {
+                    const validatedPosition = validatePosition(botData.result.bot_position);
+                    if (validatedPosition) {
+                      position = validatedPosition;
+                    }
+                  }
+                  
+                  return {
+                    ...bot,
+                    position,
+                    currentJob: botData.result.current_job || (botData.status === 'IDLE' ? 'Idle - awaiting commands' : 'Working'),
+                    status: botData.status === 'BUSY' ? 'BUSY' : 'IDLE',
+                    lastActivity: botData.result.current_job || 'Connected'
                   };
                 }
                 return bot;
