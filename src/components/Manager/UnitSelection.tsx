@@ -11,10 +11,7 @@ const UnitSelection: React.FC<UnitSelectionProps> = ({ bots, selectedBot, onBotS
   const getStatusColor = (status: BotStatus['status']) => {
     switch (status) {
       case 'IDLE': return '#888';
-      case 'IN_PROGRESS': return '#00aaff';
-      case 'COMPLETE': return '#00ff44';
-      case 'FAILED': return '#ff4444';
-      case 'BLOCKED': return '#ffaa44';
+      case 'BUSY': return '#00aaff';
       default: return '#888';
     }
   };
@@ -22,10 +19,7 @@ const UnitSelection: React.FC<UnitSelectionProps> = ({ bots, selectedBot, onBotS
   const getStatusEmoji = (status: BotStatus['status']) => {
     switch (status) {
       case 'IDLE': return '⏸️';
-      case 'IN_PROGRESS': return '⚡';
-      case 'COMPLETE': return '✅';
-      case 'FAILED': return '❌';
-      case 'BLOCKED': return '🚧';
+      case 'BUSY': return '⚡';
       default: return '❓';
     }
   };

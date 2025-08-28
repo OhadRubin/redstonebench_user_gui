@@ -1,45 +1,112 @@
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Panel from '../UI/Panel';
+import { useRedstoneBench } from '../../hooks/useRedstoneBench';
 
-interface TaskStats {
-  startTime: number | null;
-  endTime: number | null;
-  isRunning: boolean;
-  totalBlocks: number;
-  completedBlocks: number;
-  structuralComplete: boolean;
-  functionalComplete: boolean;
-  workerCount: number;
-  baselineTime: number | null; // Single worker baseline time for PE calculation
+// Contract-compliant bot job progress interface
+interface BotJobProgress {
+  botId: string | number;
+  progress_percent: number;
+  current_location: [number, number, number];
+  message: string;
+  status: 'IDLE' | 'BUSY';
+  jobType?: string;
 }
+
+// Contract error codes as per specification
+type ContractErrorCode = 'BOT_BUSY' | 'INVALID_PARAMETERS' | 'BOT_NOT_FOUND' | 'INTERNAL_ERROR';
 
 interface TaskProgressPanelProps {
-  stats: TaskStats;
-  onStartTask: () => void;
-  onStopTask: () => void;
-  onResetTask: () => void;
-  onRunFunctionalTest: () => void;
+  // Remove static props - now using useRedstoneBench hook for all data
 }
 
-const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({ 
-  stats, 
-  onStartTask, 
-  onStopTask, 
-  onResetTask,
-  onRunFunctionalTest
-}) => {
+const TaskProgressPanel: React.FC<TaskProgressPanelProps> = () => {
+  // WebSocket integration via useRedstoneBench hook
+  const { bots, taskStats, events, connectionStatus, actions } = useRedstoneBench();
+  const { sendCommand, queryBot, cancelJob, resetTask, runFunctionalTest } = actions;
+
+  // State for bot job progress tracking (contract-compliant)
+  const [botJobProgress, setBotJobProgress] = useState<Map<string | number, BotJobProgress>>(new Map());
+  const [selectedBotForCommand, setSelectedBotForCommand] = useState<string | number | null>(null);
+  const [commandTarget, setCommandTarget] = useState<{ x: number; y: number; z: number }>({ x: 100, y: 64, z: 200 });
+  const [lastError, setLastError] = useState<{ code: ContractErrorCode; message: string } | null>(null);
+  // WebSocket event processing for contract-compliant job progress
+  useEffect(() => {
+    // Process recent events for job progress updates
+    const recentEvents = events.slice(-10); // Process last 10 events
+    
+    recentEvents.forEach(event => {
+      if (event.type === 'PROGRESS' && event.details) {
+        const { bot_id, result } = event.details;
+        if (result && typeof result.progress_percent === 'number') {
+          const botProgress: BotJobProgress = {
+            botId: bot_id,
+            progress_percent: result.progress_percent,
+            current_location: result.current_location || [0, 64, 0],
+            message: result.message || 'Working...',
+            status: 'BUSY'
+          };
+          
+          setBotJobProgress(prev => new Map(prev.set(bot_id, botProgress)));
+        }
+      } else if (event.type === 'COMPLETE' || event.type === 'FAILED') {
+        // Clear progress when job completes/fails
+        const botId = event.botId;
+        setBotJobProgress(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(botId);
+          return newMap;
+        });
+      } else if (event.type === 'REJECTED' && event.errorCode) {
+        // Handle contract error codes
+        setLastError({
+          code: event.errorCode as ContractErrorCode,
+          message: event.message
+        });
+        setTimeout(() => setLastError(null), 5000); // Clear error after 5 seconds
+      }
+    });
+  }, [events]);
+
   const calculateElapsedTime = (): number => {
-    if (!stats.startTime) return 0;
-    const endTime = stats.endTime || Date.now();
-    return Math.floor((endTime - stats.startTime) / 1000);
+    if (!taskStats.startTime) return 0;
+    const endTime = taskStats.endTime || Date.now();
+    return Math.floor((endTime - taskStats.startTime) / 1000);
   };
 
   const calculateParallelizationEfficiency = (): number | null => {
-    if (!stats.baselineTime || !stats.endTime || !stats.startTime || stats.workerCount <= 1) {
+    if (!taskStats.baselineTime || !taskStats.endTime || !taskStats.startTime || taskStats.workerCount <= 1) {
       return null;
     }
-    const currentTime = (stats.endTime - stats.startTime) / 1000;
-    return (stats.baselineTime / (stats.workerCount * currentTime)) * 100;
+    const currentTime = (taskStats.endTime - taskStats.startTime) / 1000;
+    return (taskStats.baselineTime / (taskStats.workerCount * currentTime)) * 100;
+  };
+
+  // Calculate aggregated progress across all bots
+  const calculateAggregatedProgress = (): number => {
+    if (bots.length === 0) return 0;
+    
+    // Use individual bot progress if available, otherwise use overall task progress
+    let totalProgress = 0;
+    let activeBots = 0;
+    
+    bots.forEach(bot => {
+      const botId = bot.index ?? bot.id;
+      const progress = botJobProgress.get(botId);
+      if (progress) {
+        totalProgress += progress.progress_percent;
+        activeBots++;
+      } else if (bot.status === 'IDLE' && taskStats.isRunning) {
+        // Count idle bots as 0% during active tasks
+        activeBots++;
+      }
+    });
+    
+    if (activeBots > 0) {
+      return totalProgress / activeBots;
+    }
+    
+    // Fallback to task stats completion percentage
+    return taskStats.totalBlocks > 0 ? (taskStats.completedBlocks / taskStats.totalBlocks * 100) : 0;
   };
 
   const formatTime = (seconds: number): string => {
@@ -57,19 +124,60 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
   };
 
   const getTaskStatus = (): { status: string; color: string } => {
-    if (!stats.isRunning && stats.functionalComplete) {
+    if (connectionStatus === 'disconnected') {
+      return { status: 'DISCONNECTED', color: '#ff4444' };
+    }
+    if (connectionStatus === 'connecting') {
+      return { status: 'CONNECTING', color: '#ffaa44' };
+    }
+    
+    const activeBots = bots.filter(bot => bot.status === 'BUSY').length;
+    
+    if (!taskStats.isRunning && taskStats.functionalComplete) {
       return { status: 'COMPLETE', color: '#00ff44' };
-    } else if (!stats.isRunning && stats.structuralComplete) {
+    } else if (!taskStats.isRunning && taskStats.structuralComplete) {
       return { status: 'STRUCTURAL COMPLETE', color: '#ffaa44' };
-    } else if (stats.isRunning) {
-      return { status: 'IN PROGRESS', color: '#00aaff' };
+    } else if (taskStats.isRunning || activeBots > 0) {
+      return { status: `IN PROGRESS (${activeBots}/${bots.length} active)`, color: '#00aaff' };
     } else {
-      return { status: 'NOT STARTED', color: '#888' };
+      return { status: 'READY', color: '#888' };
     }
   };
+  
+  // Contract-compliant command sending
+  const handleSendMoveCommand = useCallback(() => {
+    if (!selectedBotForCommand) {
+      setLastError({ code: 'BOT_NOT_FOUND', message: 'Please select a bot first' });
+      return;
+    }
+    
+    sendCommand({
+      command: 'move_to',
+      bot_id: selectedBotForCommand,
+      x: commandTarget.x,
+      y: commandTarget.y,
+      z: commandTarget.z
+    });
+  }, [selectedBotForCommand, commandTarget, sendCommand]);
+  
+  const handleGetBotStatus = useCallback(() => {
+    if (!selectedBotForCommand) {
+      setLastError({ code: 'BOT_NOT_FOUND', message: 'Please select a bot first' });
+      return;
+    }
+    queryBot(selectedBotForCommand);
+  }, [selectedBotForCommand, queryBot]);
+  
+  const handleCancelJob = useCallback(() => {
+    if (!selectedBotForCommand) {
+      setLastError({ code: 'BOT_NOT_FOUND', message: 'Please select a bot first' });
+      return;
+    }
+    cancelJob(selectedBotForCommand);
+  }, [selectedBotForCommand, cancelJob]);
 
   const elapsedTime = calculateElapsedTime();
-  const completionPercentage = stats.totalBlocks > 0 ? (stats.completedBlocks / stats.totalBlocks * 100) : 0;
+  const completionPercentage = calculateAggregatedProgress();
   const parallelizationEfficiency = calculateParallelizationEfficiency();
   const taskStatus = getTaskStatus();
 
@@ -84,10 +192,6 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
     margin: '2px'
   };
 
-  const primaryButtonStyle: React.CSSProperties = {
-    ...buttonStyle,
-    background: stats.isRunning ? '#ff4444' : '#00aa00'
-  };
 
   const statsRowStyle: React.CSSProperties = {
     display: 'flex',
@@ -130,7 +234,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
   const timerStyle: React.CSSProperties = {
     fontSize: '18px',
     fontWeight: 'bold',
-    color: stats.isRunning ? '#00ffff' : '#888',
+    color: taskStats.isRunning ? '#00ffff' : '#888',
     textAlign: 'center',
     fontFamily: 'monospace',
     marginBottom: '10px'
@@ -188,13 +292,23 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
         <div style={statsRowStyle}>
           <span style={{ color: '#aaa' }}>Blocks:</span>
           <span style={{ color: '#fff' }}>
-            {stats.completedBlocks} / {stats.totalBlocks}
+            {taskStats.completedBlocks} / {taskStats.totalBlocks}
           </span>
         </div>
 
         <div style={statsRowStyle}>
           <span style={{ color: '#aaa' }}>Workers:</span>
-          <span style={{ color: '#fff' }}>{stats.workerCount}</span>
+          <span style={{ color: '#fff' }}>{taskStats.workerCount}</span>
+        </div>
+        
+        <div style={statsRowStyle}>
+          <span style={{ color: '#aaa' }}>Connection:</span>
+          <span style={{ 
+            color: connectionStatus === 'connected' ? '#00ff44' : 
+                   connectionStatus === 'connecting' ? '#ffaa44' : '#ff4444' 
+          }}>
+            {connectionStatus.toUpperCase()}
+          </span>
         </div>
 
         <div style={metricsGridStyle}>
@@ -203,10 +317,10 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
               Structural
             </div>
             <div style={{ 
-              color: stats.structuralComplete ? '#00ff44' : '#ff4444',
+              color: taskStats.structuralComplete ? '#00ff44' : '#ff4444',
               fontWeight: 'bold'
             }}>
-              {stats.structuralComplete ? '✓ PASS' : '✗ PENDING'}
+              {taskStats.structuralComplete ? '✓ PASS' : '✗ PENDING'}
             </div>
           </div>
 
@@ -215,10 +329,10 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
               Functional
             </div>
             <div style={{ 
-              color: stats.functionalComplete ? '#00ff44' : '#ff4444',
+              color: taskStats.functionalComplete ? '#00ff44' : '#ff4444',
               fontWeight: 'bold'
             }}>
-              {stats.functionalComplete ? '✓ PASS' : '✗ PENDING'}
+              {taskStats.functionalComplete ? '✓ PASS' : '✗ PENDING'}
             </div>
           </div>
         </div>
@@ -248,23 +362,147 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
           </div>
         )}
 
+        {/* Error display for contract errors */}
+        {lastError && (
+          <div style={{
+            marginBottom: '10px',
+            padding: '8px',
+            background: '#330000',
+            border: '1px solid #ff4444',
+            borderRadius: '4px',
+            fontSize: '11px',
+            color: '#ff8888'
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>Error: {lastError.code}</div>
+            <div>{lastError.message}</div>
+          </div>
+        )}
+        
+        {/* Individual bot progress display */}
+        {botJobProgress.size > 0 && (
+          <div style={{
+            marginBottom: '15px',
+            padding: '8px',
+            background: '#001122',
+            borderRadius: '4px',
+            border: '1px solid #0066aa'
+          }}>
+            <div style={{ color: '#00aaff', fontSize: '10px', marginBottom: '6px' }}>
+              Individual Bot Progress:
+            </div>
+            {Array.from(botJobProgress.entries()).map(([botId, progress]) => {
+              const bot = bots.find(b => (b.index ?? b.id) === botId);
+              const displayName = bot ? bot.id : `Bot ${botId}`;
+              return (
+                <div key={botId} style={{ marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '10px', color: '#aaa' }}>{displayName}:</span>
+                    <span style={{ fontSize: '10px', color: '#fff' }}>{progress.progress_percent.toFixed(1)}%</span>
+                  </div>
+                  <div style={{ fontSize: '9px', color: '#888', marginTop: '1px' }}>
+                    {progress.message} at [{progress.current_location.join(', ')}]
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        
+        {/* WebSocket Command Controls */}
+        {bots.length > 0 && (
+          <div style={{
+            marginBottom: '15px',
+            padding: '8px',
+            background: '#001100',
+            borderRadius: '4px',
+            border: '1px solid #006600'
+          }}>
+            <div style={{ color: '#00aa44', fontSize: '10px', marginBottom: '6px' }}>
+              WebSocket Commands:
+            </div>
+            
+            {/* Bot Selection */}
+            <select
+              value={selectedBotForCommand || ''}
+              onChange={(e) => setSelectedBotForCommand(e.target.value || null)}
+              style={{
+                width: '100%',
+                marginBottom: '6px',
+                padding: '4px',
+                background: '#333',
+                color: '#fff',
+                border: '1px solid #555',
+                borderRadius: '2px',
+                fontSize: '10px'
+              }}
+            >
+              <option value="">Select Bot...</option>
+              {bots.map(bot => (
+                <option key={bot.id} value={bot.index ?? bot.id}>
+                  {bot.id} ({bot.status})
+                </option>
+              ))}
+            </select>
+            
+            {/* Move Target Inputs */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+              {['x', 'y', 'z'].map(axis => (
+                <input
+                  key={axis}
+                  type="number"
+                  placeholder={axis.toUpperCase()}
+                  value={commandTarget[axis as keyof typeof commandTarget]}
+                  onChange={(e) => setCommandTarget(prev => ({
+                    ...prev,
+                    [axis]: parseInt(e.target.value) || 0
+                  }))}
+                  style={{
+                    flex: 1,
+                    padding: '4px',
+                    background: '#333',
+                    color: '#fff',
+                    border: '1px solid #555',
+                    borderRadius: '2px',
+                    fontSize: '10px'
+                  }}
+                />
+              ))}
+            </div>
+            
+            {/* Command Buttons */}
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button
+                style={{ ...buttonStyle, background: '#006600', fontSize: '10px', padding: '4px 8px' }}
+                onClick={handleSendMoveCommand}
+                disabled={!selectedBotForCommand}
+              >
+                Move To
+              </button>
+              <button
+                style={{ ...buttonStyle, background: '#666600', fontSize: '10px', padding: '4px 8px' }}
+                onClick={handleGetBotStatus}
+                disabled={!selectedBotForCommand}
+              >
+                Status
+              </button>
+              <button
+                style={{ ...buttonStyle, background: '#660000', fontSize: '10px', padding: '4px 8px' }}
+                onClick={handleCancelJob}
+                disabled={!selectedBotForCommand}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-          <button 
-            style={primaryButtonStyle}
-            onClick={stats.isRunning ? onStopTask : onStartTask}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = stats.isRunning ? '#ff6666' : '#00cc00';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = stats.isRunning ? '#ff4444' : '#00aa00';
-            }}
-          >
-            {stats.isRunning ? 'Stop Task' : 'Start Task'}
-          </button>
+          {/* Start/Stop Task functionality removed for WebSocket contract compliance */}
+          {/* Non-contract features like global task management are not supported */}
 
           <button 
             style={buttonStyle}
-            onClick={onResetTask}
+            onClick={resetTask}
             onMouseEnter={(e) => e.currentTarget.style.background = '#888'}
             onMouseLeave={(e) => e.currentTarget.style.background = '#666'}
           >
@@ -274,16 +512,16 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
           <button 
             style={{
               ...buttonStyle,
-              background: stats.structuralComplete ? '#aa6600' : '#444'
+              background: taskStats.structuralComplete ? '#aa6600' : '#444'
             }}
-            onClick={onRunFunctionalTest}
-            disabled={!stats.structuralComplete}
+            onClick={runFunctionalTest}
+            disabled={!taskStats.structuralComplete}
             onMouseEnter={(e) => {
-              if (!stats.structuralComplete) return;
+              if (!taskStats.structuralComplete) return;
               e.currentTarget.style.background = '#cc8800';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = stats.structuralComplete ? '#aa6600' : '#444';
+              e.currentTarget.style.background = taskStats.structuralComplete ? '#aa6600' : '#444';
             }}
           >
             Test Function
@@ -296,7 +534,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = ({
           color: '#666',
           textAlign: 'center'
         }}>
-          RedstoneBench Human Calibration Interface
+          RedstoneBench WebSocket-Integrated Interface
         </div>
       </div>
     </Panel>

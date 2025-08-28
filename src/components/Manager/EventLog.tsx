@@ -4,7 +4,10 @@ export interface BotEvent {
   id: string;
   timestamp: number;
   botId: string; // Changed to string to match server format (e.g., "worker_0")
-  type: 'START' | 'PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'COMMAND_SENT';
+  type: 'START' | 'PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'COMMAND_SENT' | 
+        'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'CANCEL_FAILED' | 'CANCEL_SUCCESS' | 
+        'CANCEL_REQUESTED' | 'ERROR' | 'UNKNOWN_MESSAGE' | 'SUCCESS' | 
+        'BOT_BUSY' | 'INVALID_PARAMETERS' | 'BOT_NOT_FOUND' | 'INTERNAL_ERROR';
   jobId?: string;
   message: string;
   details?: any;

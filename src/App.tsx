@@ -154,6 +154,7 @@ const MainBottomPanel: React.FC<MainBottomPanelProps> = ({ bots, availableBots, 
           selectedBot={selectedBot}
           availableBots={availableBots}
           onCommandSent={actions.sendCommand}
+          onCancelJob={actions.cancelJob}
           selectedCommand={selectedCommand}
           onCommandChange={onCommandChange}
           moveTarget={moveTarget}
@@ -249,8 +250,8 @@ function App() {
     // Auto-center viewport on selected bot (standard RTS behavior)
     if (bot) {
       // Use the same coordinate scaling as BotCanvas (factor of 5)
-      const worldX = bot.position.x * 5;
-      const worldZ = bot.position.y * 5; // bot.position.y contains the original z coordinate
+      const worldX = bot.position[0] * 5; // x coordinate from [x, y, z] array
+      const worldZ = bot.position[2] * 5; // z coordinate from [x, y, z] array for 2D view
       
       setViewport(prev => ({
         ...prev,
@@ -368,13 +369,7 @@ function App() {
         
         {/* Task Progress Panel overlay */}
         <div style={{ position: 'absolute', top: '16px', right: '16px' }}>
-          <TaskProgressPanel
-            stats={taskStats}
-            onStartTask={actions.startTask}
-            onStopTask={actions.stopTask}
-            onResetTask={actions.resetTask}
-            onRunFunctionalTest={actions.runFunctionalTest}
-          />
+          <TaskProgressPanel />
         </div>
       </div>
 

@@ -3,13 +3,22 @@ import React from 'react';
 export interface BotStatus {
   id: string; // Bot ID string (e.g., "worker_0") - for display and compatibility
   index: number; // Numeric worker index - for Protocol V2 communication
-  position: { x: number; y: number; z: number };
+  position: [number, number, number]; // Contract-compliant [x, y, z] format
   inventory: { [item: string]: number };
   currentJob: string;
-  status: 'IDLE' | 'IN_PROGRESS' | 'COMPLETE' | 'FAILED' | 'BLOCKED';
+  status: 'IDLE' | 'BUSY'; // Contract-compliant status values only
   lastActivity: string;
   utilization: number; // percentage
-  lastLog?: string; // NEW: Recent general bot activity from server
+  lastLog?: string; // Recent general bot activity from server
+  // Contract-compliant additional fields
+  health?: number; // Health points (0-20)
+  food?: number; // Food/hunger level (0-20)
+  // Job lifecycle tracking
+  currentJobProgress?: {
+    progress_percent: number; // 0-100
+    current_location?: [number, number, number];
+    message?: string;
+  };
 }
 
 interface WorkerDashboardProps {
@@ -22,10 +31,7 @@ const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot, sel
   const getStatusColor = (status: BotStatus['status']) => {
     switch (status) {
       case 'IDLE': return '#888';
-      case 'IN_PROGRESS': return '#00aaff';
-      case 'COMPLETE': return '#00ff44';
-      case 'FAILED': return '#ff4444';
-      case 'BLOCKED': return '#ffaa44';
+      case 'BUSY': return '#00aaff';
       default: return '#888';
     }
   };
@@ -148,7 +154,7 @@ const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot, sel
             <div style={infoRowStyle}>
               <span style={{ color: '#aaa' }}>Position:</span>
               <span style={{ color: '#fff' }}>
-                ({bot.position.x}, {bot.position.y}, {bot.position.z})
+                ({bot.position[0]}, {bot.position[1]}, {bot.position[2]})
               </span>
             </div>
 
@@ -159,12 +165,73 @@ const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot, sel
               </span>
             </div>
 
+            {/* Job Progress Display */}
+            {bot.currentJobProgress && (
+              <div style={{ marginBottom: '6px' }}>
+                <div style={infoRowStyle}>
+                  <span style={{ color: '#aaa' }}>Progress:</span>
+                  <span style={{ color: '#00ff44' }}>
+                    {bot.currentJobProgress.progress_percent}%
+                  </span>
+                </div>
+                {bot.currentJobProgress.message && (
+                  <div style={{ 
+                    color: '#fff', 
+                    fontSize: '9px', 
+                    background: '#2a2a2a', 
+                    padding: '3px 6px', 
+                    borderRadius: '3px',
+                    marginBottom: '4px'
+                  }}>
+                    {bot.currentJobProgress.message}
+                  </div>
+                )}
+                {/* Progress Bar */}
+                <div style={{
+                  width: '100%',
+                  height: '4px',
+                  background: '#333',
+                  borderRadius: '2px',
+                  overflow: 'hidden',
+                  marginBottom: '4px'
+                }}>
+                  <div style={{
+                    width: `${bot.currentJobProgress.progress_percent}%`,
+                    height: '100%',
+                    background: '#00ff44',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+                {bot.currentJobProgress.current_location && (
+                  <div style={{ 
+                    color: '#aaa', 
+                    fontSize: '9px',
+                    marginBottom: '4px'
+                  }}>
+                    Current: ({bot.currentJobProgress.current_location[0]}, {bot.currentJobProgress.current_location[1]}, {bot.currentJobProgress.current_location[2]})
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={infoRowStyle}>
               <span style={{ color: '#aaa' }}>Last Activity:</span>
               <span style={{ color: '#fff' }}>
                 {bot.lastActivity}
               </span>
             </div>
+
+            {/* Health and Food Status */}
+            {(bot.health !== undefined || bot.food !== undefined) && (
+              <div style={infoRowStyle}>
+                <span style={{ color: '#aaa' }}>Health/Food:</span>
+                <span style={{ color: '#fff' }}>
+                  {bot.health !== undefined ? `❤️ ${bot.health}` : ''}
+                  {bot.health !== undefined && bot.food !== undefined ? ' | ' : ''}
+                  {bot.food !== undefined ? `🍖 ${bot.food}` : ''}
+                </span>
+              </div>
+            )}
 
             <div style={{ marginBottom: '6px' }}>
               <div style={{ color: '#aaa', fontSize: '10px', marginBottom: '2px' }}>
@@ -226,7 +293,10 @@ const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ bots, onQueryBot, sel
         }}>
           <div style={{ color: '#ffff00', fontWeight: 'bold' }}>Selected Bot:</div>
           <div style={{ color: '#fff' }}>Bot {selectedBot.id} - {selectedBot.status}</div>
-          <div style={{ color: '#aaa' }}>Pos: ({selectedBot.position.x}, {selectedBot.position.y}, {selectedBot.position.z})</div>
+          <div style={{ color: '#aaa' }}>Pos: ({selectedBot.position[0]}, {selectedBot.position[1]}, {selectedBot.position[2]})</div>
+          {selectedBot.currentJobProgress && (
+            <div style={{ color: '#aaa' }}>Progress: {selectedBot.currentJobProgress.progress_percent}%</div>
+          )}
         </div>
       )}
     </div>

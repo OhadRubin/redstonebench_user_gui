@@ -87,8 +87,8 @@ const Minimap: React.FC<MinimapProps> = ({
 
     // Draw bots on minimap
     bots.forEach(bot => {
-      const botWorldX = bot.position.x * 5; // Same scaling as BotCanvas
-      const botWorldZ = bot.position.z * 5;
+      const botWorldX = bot.position[0] * 5; // Same scaling as BotCanvas ([x, y, z] array format)
+      const botWorldZ = bot.position[2] * 5; // Using z coordinate from [x, y, z] array
       
       // Convert world coordinates to minimap coordinates
       const minimapX = ((botWorldX - WORLD_BOUNDS.minX) / worldWidth) * canvas.width;
@@ -96,9 +96,7 @@ const Minimap: React.FC<MinimapProps> = ({
 
       // Bot color based on status
       let botColor = '#3B82F6'; // Blue for active
-      if (bot.status === 'FAILED') botColor = '#EF4444';
-      else if (bot.status === 'BLOCKED') botColor = '#F59E0B';
-      else if (bot.status === 'COMPLETE') botColor = '#10B981';
+      if (bot.status === 'BUSY') botColor = '#00AAFF'; // Contract-compliant: BUSY status
 
       // Draw bot
       const isSelected = selectedBot?.id === bot.id;

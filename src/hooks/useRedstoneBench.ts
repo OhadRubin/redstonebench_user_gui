@@ -18,9 +18,29 @@ export interface RedstoneBenchState {
   bots: BotStatus[];
   events: BotEvent[];
   taskStats: TaskStats;
-  completedBlocks: Set<string>;
+  completedBlocks: Set<[number, number, number]>; // Contract-compliant coordinate arrays [x,y,z]
   connectionStatus: 'connected' | 'connecting' | 'disconnected';
 }
+
+// Contract error codes as defined in contract.md
+const CONTRACT_ERROR_CODES = ['BOT_BUSY', 'INVALID_PARAMETERS', 'BOT_NOT_FOUND', 'INTERNAL_ERROR'] as const;
+type ContractErrorCode = typeof CONTRACT_ERROR_CODES[number];
+
+// Bot ID validation helper (contract specifies 0-64 range)
+const isValidBotId = (botId: number): boolean => {
+  return Number.isInteger(botId) && botId >= 0 && botId <= 64;
+};
+
+// Position format validation and conversion helper
+const validatePosition = (position: any): [number, number, number] | null => {
+  if (Array.isArray(position) && position.length >= 3) {
+    const [x, y, z] = position;
+    if (typeof x === 'number' && typeof y === 'number' && typeof z === 'number') {
+      return [x, y, z];
+    }
+  }
+  return null;
+};
 
 export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') => {
   // Initialize state
@@ -50,14 +70,20 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
 
   const queryAllBots = useCallback(() => {
     if (websocket.current?.readyState === WebSocket.OPEN) {
-      // Use server's get_status format to get all workers
-      websocket.current.send(JSON.stringify({
-        type: 'get_status'
-      }));
+      // Query each bot individually as per contract (no bulk status query)
+      state.bots.forEach(bot => {
+        const botId = typeof bot.index === 'number' ? bot.index : 0;
+        if (isValidBotId(botId)) {
+          websocket.current?.send(JSON.stringify({
+            type: 'get_status',
+            bot_id: botId
+          }));
+        }
+      });
     }
-  }, []);
+  }, [state.bots]);
 
-  const startStatusPolling = useCallback((botIds: (string | number)[]) => {
+  const startStatusPolling = useCallback((botIds: number[]) => {
     // Clear any existing polling
     if (statusPollInterval.current) {
       clearInterval(statusPollInterval.current);
@@ -80,6 +106,44 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       statusPollInterval.current = null;
       console.log('⏹️ Stopped status polling');
     }
+  }, []);
+
+  // Handle contract-specific error codes
+  const handleContractError = useCallback((error: { code: string; message: string }, botId?: number) => {
+    let errorType: BotEvent['type'] = 'ERROR';
+    let errorMessage = error.message;
+
+    switch (error.code as ContractErrorCode) {
+      case 'BOT_BUSY':
+        errorType = 'BOT_BUSY';
+        break;
+      case 'INVALID_PARAMETERS':
+        errorType = 'INVALID_PARAMETERS';
+        break;
+      case 'BOT_NOT_FOUND':
+        errorType = 'BOT_NOT_FOUND';
+        break;
+      case 'INTERNAL_ERROR':
+        errorType = 'INTERNAL_ERROR';
+        break;
+      default:
+        console.warn('⚠️ Unrecognized error code:', error.code);
+    }
+
+    const errorEvent: BotEvent = {
+      id: (++eventIdCounter.current).toString(),
+      timestamp: Date.now(),
+      botId: botId ? botId.toString() : 'system',
+      type: errorType,
+      message: errorMessage,
+      details: error,
+      errorCode: error.code
+    };
+
+    setState(prev => ({
+      ...prev,
+      events: [...prev.events.slice(-99), errorEvent]
+    }));
   }, []);
 
   const connectWebSocket = useCallback(() => {
@@ -111,212 +175,170 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
           const data = JSON.parse(event.data);
           console.log('📨 Received message from server:', JSON.stringify(data, null, 2));
           
-          if (data.type === 'connection_established') {
-            // Handle connection_established message with workers_available IDs
-            if (data.workers_available && Array.isArray(data.workers_available)) {
-              // Protocol V2: workers_available is array of {index, botId} objects
-              // Protocol V1: workers_available is array of botId strings
-              const isProtocolV2 = data.workers_available.length > 0 && 
-                                   typeof data.workers_available[0] === 'object' && 
-                                   'index' in data.workers_available[0];
-              
-              const newBots: BotStatus[] = data.workers_available.map((worker: any) => {
-                const botId = isProtocolV2 ? worker.botId : worker;
-                const index = isProtocolV2 ? worker.index : parseInt(botId.split('_')[1]) || 0;
-                
-                return {
-                  id: botId, // Keep as string (e.g., "worker_0") for display
-                  index: index, // Numeric index for Protocol V2 communication
-                  position: { x: 0, y: 0, z: 64 }, // x=x, y=z (for 2D view), z=y
-                  inventory: {},
-                  currentJob: 'Querying status...',
-                  status: 'IDLE' as const,
-                  lastActivity: 'Connected',
-                  utilization: 0,
-                  lastLog: 'Bot connected and ready' // Default initial state
-                };
-              });
-
-              setState(prev => ({
-                ...prev,
-                bots: newBots,
-                taskStats: { ...prev.taskStats, workerCount: newBots.length }
-              }));
-
-              // Log protocol version detected
-              const protocolVersion = data.server_info?.protocol_version || (isProtocolV2 ? 2 : 1);
-              console.log(`🔗 Protocol V${protocolVersion} detected`, {
-                protocolVersion,
-                aliases: data.server_info?.aliases,
-                capabilities: data.server_info?.capabilities
-              });
-
-              // Start polling for bot status updates with proper format
-              const botIdentifiers = isProtocolV2 ? 
-                data.workers_available.map((w: any) => w.index) : 
-                data.workers_available;
-              startStatusPolling(botIdentifiers);
+          // Handle contract-compliant messages only
+          if (data.type === 'command_response') {
+            // Handle command acceptance/rejection per contract
+            if (data.error && CONTRACT_ERROR_CODES.includes(data.error.code)) {
+              handleContractError(data.error, data.bot_id);
             }
-          } else if (data.type === 'bot_status_update') {
+
+            const responseEvent: BotEvent = {
+              id: (++eventIdCounter.current).toString(),
+              timestamp: Date.now(),
+              botId: data.bot_id ? data.bot_id.toString() : 'system',
+              type: data.status === 'accepted' ? 'ACCEPTED' : 'REJECTED',
+              message: data.status === 'accepted' 
+                ? `Command ${data.cmd} accepted for bot ${data.bot_id}`
+                : `Command ${data.cmd} rejected: ${data.error?.message || data.message || 'Unknown error'}`,
+              details: data,
+              errorCode: data.error?.code
+            };
+
+            setState(prev => ({
+              ...prev,
+              events: [...prev.events.slice(-99), responseEvent]
+            }));
+          } else if (data.type === 'status_response') {
+            // Handle status response per contract
+            if (!isValidBotId(data.bot_id)) {
+              console.warn('⚠️ Invalid bot_id received:', data.bot_id);
+              return;
+            }
+
             setState(prev => ({
               ...prev,
               bots: prev.bots.map(bot => {
-                // Protocol V2 uses numeric bot_id, V1 uses string bot_id
-                const matchesBot = typeof data.bot_id === 'number' 
-                  ? bot.index === data.bot_id 
-                  : bot.id === data.bot_id;
-                
-                return matchesBot ? {
-                  ...bot,
-                  position: data.position || bot.position,
-                  inventory: data.inventory || bot.inventory,
-                  currentJob: data.current_job || bot.currentJob,
-                  status: data.status || bot.status,
-                  lastActivity: data.last_activity || bot.lastActivity,
-                  utilization: data.utilization || bot.utilization
-                } : bot;
+                if (bot.index === data.bot_id && data.result) {
+                  // Keep position as [x,y,z] array format per contract
+                  let position: [number, number, number] = bot.position as [number, number, number];
+                  if (data.result.bot_position) {
+                    const validatedPosition = validatePosition(data.result.bot_position);
+                    if (validatedPosition) {
+                      position = validatedPosition;
+                    }
+                  }
+                  
+                  return {
+                    ...bot,
+                    position,
+                    currentJob: data.result.current_job || (data.status === 'IDLE' ? 'Idle - awaiting commands' : 'Working'),
+                    status: data.status === 'BUSY' ? 'BUSY' : 'IDLE',
+                    lastActivity: data.result.current_job || 'Connected'
+                  };
+                }
+                return bot;
               })
             }));
-          } else if (data.type === 'start' || data.type === 'progress' || data.type === 'complete' || data.type === 'failed') {
-            // Handle server's worker event format (lowercase types)
+          } else if (data.type === 'cancel_response') {
+            // Handle job cancellation response per contract
+            if (!isValidBotId(data.bot_id)) {
+              console.warn('⚠️ Invalid bot_id received:', data.bot_id);
+              return;
+            }
+
+            const cancelEvent: BotEvent = {
+              id: (++eventIdCounter.current).toString(),
+              timestamp: Date.now(),
+              botId: data.bot_id.toString(),
+              type: data.success ? 'CANCELLED' : 'CANCEL_FAILED',
+              message: data.success 
+                ? `Job cancelled for bot ${data.bot_id}: ${data.message || 'Success'}`
+                : `Cancel failed for bot ${data.bot_id}: ${data.message || 'Unknown error'}`,
+              details: data
+            };
+
+            setState(prev => ({
+              ...prev,
+              events: [...prev.events.slice(-99), cancelEvent]
+            }));
+          } else if (['job_start', 'job_progress', 'job_complete', 'job_failed'].includes(data.type)) {
+            // Handle contract-compliant job lifecycle events
+            if (!isValidBotId(data.bot_id)) {
+              console.warn('⚠️ Invalid bot_id received:', data.bot_id);
+              return;
+            }
+
             const eventTypeMap: {[key: string]: string} = {
-              'start': 'START',
-              'progress': 'PROGRESS', 
-              'complete': 'COMPLETE',
-              'failed': 'FAILED'
+              'job_start': 'START',
+              'job_progress': 'PROGRESS', 
+              'job_complete': 'COMPLETE',
+              'job_failed': 'FAILED'
             };
 
             const generateEventMessage = (eventData: any) => {
-              // Protocol V2 uses numeric bot_id, find display name
-              const bot = state.bots.find(b => 
-                typeof eventData.bot_id === 'number' ? b.index === eventData.bot_id : b.id === eventData.bot_id
-              );
-              const botDisplayName = bot ? bot.id : `Worker ${eventData.bot_id}`;
-              const jobId = eventData.job_id;
+              const bot = state.bots.find(b => b.index === eventData.bot_id);
+              const botDisplayName = bot ? bot.id : `Bot ${eventData.bot_id}`;
               
               switch (eventData.type) {
-                case 'start': {
-                  // Protocol V2: command is string; V1: command is object with cmd property
-                  const cmdName = typeof eventData.command === 'string' 
-                    ? eventData.command 
-                    : eventData.command?.cmd || 'unknown';
-                  return `${botDisplayName} started ${cmdName} (${jobId})`;
+                case 'job_start': {
+                  const cmdName = eventData.command || 'unknown';
+                  return `${botDisplayName} started ${cmdName}`;
                 }
-                case 'progress': return `${botDisplayName} making progress on ${jobId}`;
-                case 'complete': return `${botDisplayName} completed ${jobId}`;
-                case 'failed': return `${botDisplayName} failed ${jobId}: ${eventData.error?.message || 'Unknown error'}`;
+                case 'job_progress': {
+                  const progress = eventData.result?.progress_percent;
+                  const message = eventData.result?.message;
+                  return `${botDisplayName} progress: ${progress}%${message ? ` - ${message}` : ''}`;
+                }
+                case 'job_complete': {
+                  const position = eventData.result?.position;
+                  return `${botDisplayName} completed job${position ? ` at [${position.join(', ')}]` : ''}`;
+                }
+                case 'job_failed': {
+                  const reason = eventData.reason || 'Unknown error';
+                  return `${botDisplayName} failed: ${reason}`;
+                }
                 default: return `${botDisplayName} event: ${eventData.type}`;
               }
             };
 
+            // Update bot position if provided in result
+            if (data.result?.position || data.result?.current_location) {
+              const positionData = data.result.position || data.result.current_location;
+              const validatedPosition = validatePosition(positionData);
+              if (validatedPosition) {
+                setState(prev => ({
+                  ...prev,
+                  bots: prev.bots.map(bot => 
+                    bot.index === data.bot_id 
+                      ? { ...bot, position: validatedPosition }
+                      : bot
+                  )
+                }));
+              }
+            }
+
             const newEvent: BotEvent = {
               id: (++eventIdCounter.current).toString(),
               timestamp: data.timestamp || Date.now(),
-              botId: typeof data.bot_id === 'number' ? data.bot_id.toString() : data.bot_id,
+              botId: data.bot_id.toString(),
               type: eventTypeMap[data.type] || data.type.toUpperCase(),
-              jobId: data.job_id,
+              jobId: `job_${data.bot_id}_${Date.now()}`,
               message: data.message || generateEventMessage(data),
-              details: data.result || data.error || data.current,
-              errorCode: data.error?.code
+              details: data.result || data.error_details || data,
+              errorCode: data.type === 'job_failed' ? 'JOB_FAILED' : undefined
             };
 
             setState(prev => ({
               ...prev,
               events: [...prev.events.slice(-99), newEvent]
             }));
-          } else if (data.type === 'worker_list') {
-            const newBots: BotStatus[] = data.workers.map((worker: any) => ({
-              id: worker.id,
-              position: worker.position || { x: 0, y: 0, z: 64 }, // x=x, y=z (for 2D view), z=y
-              inventory: worker.inventory || {},
-              currentJob: worker.current_job || 'Idle',
-              status: worker.status || 'IDLE',
-              lastActivity: worker.last_activity || 'Connected',
-              utilization: worker.utilization || 0
-            }));
-
-            setState(prev => ({
-              ...prev,
-              bots: newBots,
-              taskStats: { ...prev.taskStats, workerCount: newBots.length }
-            }));
-          } else if (data.type === 'block_completed') {
-            const blockKey = `${data.x},${data.y},${data.z}`;
-            setState(prev => ({
-              ...prev,
-              completedBlocks: new Set([...Array.from(prev.completedBlocks), blockKey])
-            }));
-          } else if (data.status === 'success' && data.data && data.data.workers) {
-            // Handle server's status response format: {status: "success", data: {workers: [...]}}
-            const workers = data.data.workers;
-            setState(prev => ({
-              ...prev,
-              bots: prev.bots.map(bot => {
-                // Protocol V2 uses numeric worker.id, V1 uses string worker.id
-                const serverWorker = workers.find((w: any) => 
-                  typeof w.id === 'number' ? w.id === bot.index : w.id === bot.id
-                );
-                if (serverWorker) {
-                  // Convert position array [x, y, z] to object {x, y} (using x and z for 2D view)
-                  let position = bot.position;
-                  if (serverWorker.position && Array.isArray(serverWorker.position) && serverWorker.position.length >= 3) {
-                    position = { x: serverWorker.position[0], y: serverWorker.position[2], z: serverWorker.position[1] };
-                  } else if (serverWorker.position && typeof serverWorker.position === 'object') {
-                    position = serverWorker.position;
-                  }
-
-                  return {
-                    ...bot,
-                    position,
-                    inventory: serverWorker.inventory || bot.inventory,
-                    currentJob: serverWorker.current_job || (serverWorker.status === 'IDLE' ? 'Idle - awaiting commands' : 'Working'),
-                    status: serverWorker.status === 'BUSY' ? 'IN_PROGRESS' : 'IDLE',
-                    lastActivity: serverWorker.current_job || 'Connected',
-                    utilization: serverWorker.utilization || 0,
-                    lastLog: serverWorker.last_log || bot.lastLog // NEW: Handle last_log field
-                  };
-                }
-                return bot;
-              }),
-              taskStats: {
-                ...prev.taskStats,
-                isRunning: data.data.task_active || false,
-                startTime: data.data.start_time || prev.taskStats.startTime
-              }
-            }));
-          } else if (data.status === 'accepted' || data.status === 'rejected') {
-            // Handle Protocol V2 command acknowledgments
-            const ackEvent: BotEvent = {
-              id: (++eventIdCounter.current).toString(),
-              timestamp: Date.now(),
-              botId: data.data?.job_id || 'system',
-              type: data.status.toUpperCase(),
-              jobId: data.data?.job_id || 'unknown',
-              message: data.status === 'accepted' 
-                ? `Command accepted (Job: ${data.data?.job_id})`
-                : `Command rejected: ${data.message || 'Unknown error'}`,
-              details: data
-            };
-
-            setState(prev => ({
-              ...prev,
-              events: [...prev.events.slice(-99), ackEvent]
-            }));
-          } else if ((data.status === 'success' || data.status === 'error') && !data.data?.workers) {
-            // Handle Protocol V2 control responses (start/stop/reset operations)
-            const controlEvent: BotEvent = {
+          } else {
+            // Log unrecognized message types for debugging
+            console.warn('⚠️ Received message type not in contract:', data.type, data);
+            
+            // Add event for unknown message types
+            const unknownEvent: BotEvent = {
               id: (++eventIdCounter.current).toString(),
               timestamp: Date.now(),
               botId: 'system',
-              type: data.status.toUpperCase(),
-              jobId: 'control',
-              message: data.message || `Control operation ${data.status}`,
+              type: 'UNKNOWN_MESSAGE',
+              message: `Received non-contract message type: ${data.type}`,
               details: data
             };
 
             setState(prev => ({
               ...prev,
-              events: [...prev.events.slice(-99), controlEvent]
+              events: [...prev.events.slice(-99), unknownEvent]
             }));
           }
         } catch (error) {
@@ -372,8 +394,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
         connectWebSocket();
       }, 2000);
     }
-  }, [websocketUrl]);
-
+  }, [websocketUrl, handleContractError, state.bots]);
 
   // Initialize WebSocket connection 
   useEffect(() => {
@@ -390,84 +411,108 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     };
   }, [connectWebSocket, stopStatusPolling]);
 
-  // Transform client command format to server format
+  // Transform client command format to contract-compliant server format
   const transformCommandForServer = useCallback((command: any) => {
-    // For Protocol V2, prefer numeric index if available; fallback to string bot_id
+    // Validate and convert bot_id
     let botId = command.bot_id || 0;
     
     // If bot_id is a string, try to find the numeric index from current bots
     if (typeof botId === 'string') {
       const bot = state.bots.find(b => b.id === botId);
-      if (bot) {
-        botId = bot.index; // Use numeric index for Protocol V2
+      if (bot && typeof bot.index === 'number') {
+        botId = bot.index;
+      } else {
+        // Try to parse as number
+        const parsed = parseInt(botId);
+        botId = isNaN(parsed) ? 0 : parsed;
       }
     }
     
-    // Handle Protocol V2 aliases
-    let commandType = command.command;
-    if (commandType === 'place_blueprint') {
-      commandType = 'place_block'; // Protocol V2 alias: place_blueprint → place_block
+    // Validate bot ID range per contract
+    if (!isValidBotId(botId)) {
+      throw new Error(`Invalid bot ID: ${botId}. Must be between 0 and 64.`);
     }
     
+    // Contract-compliant base command structure
     const baseCommand = {
-      type: commandType,
+      type: "command",
+      cmd: command.command,
       bot_id: botId,
-      job_id: `gui_job_${Date.now()}`
+      parameters: {} as any
     };
 
-    // Handle specific command transformations
+    // Handle specific command parameter transformations according to contract
     switch (command.command) {
       case 'move_to':
+        // Validate coordinates
+        const x = Number(command.x);
+        const y = Number(command.y);
+        const z = Number(command.z);
+        
+        if (isNaN(x) || isNaN(y) || isNaN(z)) {
+          throw new Error('Invalid coordinates for move_to command. x, y, z must be numbers.');
+        }
+        
         return {
           ...baseCommand,
-          target: {
-            x: command.x,
-            y: command.y, 
-            z: command.z
+          parameters: {
+            target: [x, y, z] // Contract requires [x,y,z] array format
           }
         };
       
       case 'gather':
         return {
           ...baseCommand,
-          resource: command.resource?.replace('minecraft:', '') || command.resource,
-          quantity: command.quantity || 1,
-          ...(command.region && {
-            area: {
-              x1: command.region.x1,
-              z1: command.region.z1,
-              x2: command.region.x2,
-              z2: command.region.z2
-            }
-          })
+          parameters: {
+            resource: command.resource?.replace('minecraft:', '') || command.resource,
+            quantity: command.quantity || 1,
+            ...(command.region && {
+              area: {
+                x1: command.region.x1,
+                z1: command.region.z1,
+                x2: command.region.x2,
+                z2: command.region.z2
+              }
+            })
+          }
         };
       
       case 'craft':
         return {
           ...baseCommand,
-          item: command.item?.replace('minecraft:', '') || command.item,
-          quantity: command.quantity || 1
+          parameters: {
+            item: command.item?.replace('minecraft:', '') || command.item,
+            quantity: command.quantity || 1
+          }
         };
       
       case 'place_blueprint':
+        // Validate coordinates
+        const px = Number(command.x);
+        const py = Number(command.y);
+        const pz = Number(command.z);
+        
+        if (isNaN(px) || isNaN(py) || isNaN(pz)) {
+          throw new Error('Invalid coordinates for place_blueprint command. x, y, z must be numbers.');
+        }
+        
         return {
           ...baseCommand,
-          type: 'place_block', // Server uses place_block
-          block_type: command.block_type || 'stone',
-          coordinates: {
-            x: command.x,
-            y: command.y,
-            z: command.z
+          cmd: 'place_blueprint',
+          parameters: {
+            block_type: command.block_type || 'stone',
+            coordinates: [px, py, pz] // Contract requires [x,y,z] array format
           }
         };
       
       case 'use_chest':
-        // Transform chest command if needed
         return {
           ...baseCommand,
-          action: command.action,
-          items: command.items,
-          chest_pos: command.chest_pos
+          parameters: {
+            action: command.action,
+            items: command.items,
+            chest_pos: command.chest_pos
+          }
         };
       
       default:
@@ -476,67 +521,103 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
   }, [state.bots]);
 
   const sendCommand = useCallback((command: any) => {
-    if (websocket.current?.readyState === WebSocket.OPEN) {
-      // Transform command to server format
-      const serverCommand = transformCommandForServer(command);
-      websocket.current.send(JSON.stringify(serverCommand));
-    }
+    try {
+      if (websocket.current?.readyState === WebSocket.OPEN) {
+        // Transform command to contract-compliant server format
+        const serverCommand = transformCommandForServer(command);
+        console.log('📤 Sending contract-compliant command:', JSON.stringify(serverCommand, null, 2));
+        websocket.current.send(JSON.stringify(serverCommand));
+      }
 
-    // Add local event for immediate feedback
-    const newEvent: BotEvent = {
-      id: (++eventIdCounter.current).toString(),
-      timestamp: Date.now(),
-      botId: command.bot_id,
-      type: 'COMMAND_SENT',
-      message: `Sent ${command.command} command to Bot ${command.bot_id}`,
-      details: command
-    };
+      // Add local event for immediate feedback
+      const newEvent: BotEvent = {
+        id: (++eventIdCounter.current).toString(),
+        timestamp: Date.now(),
+        botId: command.bot_id,
+        type: 'COMMAND_SENT',
+        message: `Sent ${command.command} command to Bot ${command.bot_id}`,
+        details: command
+      };
 
-    setState(prevState => ({
-      ...prevState,
-      events: [...prevState.events, newEvent]
-    }));
+      setState(prevState => ({
+        ...prevState,
+        events: [...prevState.events.slice(-99), newEvent]
+      }));
 
-    // If not connected, simulate response (for test mode)
-    if (!websocket.current || websocket.current.readyState !== WebSocket.OPEN) {
-      setTimeout(() => {
-        const responseEvent: BotEvent = {
-          id: (++eventIdCounter.current).toString(),
-          timestamp: Date.now(),
-          botId: command.bot_id,
-          type: 'START',
-          jobId: `job_${Date.now()}`,
-          message: `Bot ${command.bot_id} started executing ${command.command} (test mode)`
-        };
+      // If not connected, simulate response (for test mode)
+      if (!websocket.current || websocket.current.readyState !== WebSocket.OPEN) {
+        setTimeout(() => {
+          const responseEvent: BotEvent = {
+            id: (++eventIdCounter.current).toString(),
+            timestamp: Date.now(),
+            botId: command.bot_id,
+            type: 'START',
+            jobId: `job_${Date.now()}`,
+            message: `Bot ${command.bot_id} started executing ${command.command} (test mode)`
+          };
 
-        setState(prevState => ({
-          ...prevState,
-          events: [...prevState.events, responseEvent],
-          bots: prevState.bots.map(bot => 
-            bot.id === command.bot_id 
-              ? { 
-                  ...bot, 
-                  status: 'IN_PROGRESS', 
-                  currentJob: `Executing ${command.command}`,
-                  lastActivity: `Started ${command.command}`
-                }
-              : bot
-          )
-        }));
-      }, 1000 + Math.random() * 2000);
-    }
+          setState(prevState => ({
+            ...prevState,
+            events: [...prevState.events.slice(-99), responseEvent],
+            bots: prevState.bots.map(bot => 
+              bot.id === command.bot_id 
+                ? { 
+                    ...bot, 
+                    status: 'BUSY' as const, 
+                    currentJob: `Executing ${command.command}`,
+                    lastActivity: `Started ${command.command}`
+                  }
+                : bot
+            )
+          }));
+        }, 1000 + Math.random() * 2000);
+      }
 
-    console.log('Command sent:', command);
-  }, []);
+      console.log('Command sent:', command);
+    } catch (error) {
+      // Handle validation errors
+      const errorEvent: BotEvent = {
+        id: (++eventIdCounter.current).toString(),
+        timestamp: Date.now(),
+        botId: command.bot_id || 'system',
+        type: 'ERROR',
+        message: `Failed to send command: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        details: { command, error: error instanceof Error ? error.message : error },
+        errorCode: 'COMMAND_VALIDATION_ERROR'
+      };
 
-  const queryBot = useCallback((_botId: string) => {
-    // Use get_status instead of individual bot queries
-    if (websocket.current?.readyState === WebSocket.OPEN) {
-      websocket.current.send(JSON.stringify({
-        type: 'get_status'
+      setState(prevState => ({
+        ...prevState,
+        events: [...prevState.events.slice(-99), errorEvent]
       }));
     }
-  }, []);
+  }, [transformCommandForServer]);
+
+  const queryBot = useCallback((botId: string | number) => {
+    if (websocket.current?.readyState === WebSocket.OPEN) {
+      // Convert string botId to numeric if needed
+      let numericBotId = typeof botId === 'number' ? botId : 0;
+      if (typeof botId === 'string') {
+        const bot = state.bots.find(b => b.id === botId);
+        if (bot && typeof bot.index === 'number') {
+          numericBotId = bot.index;
+        } else {
+          const parsed = parseInt(botId);
+          numericBotId = isNaN(parsed) ? 0 : parsed;
+        }
+      }
+      
+      if (!isValidBotId(numericBotId)) {
+        console.warn('⚠️ Invalid bot ID for query:', botId);
+        return;
+      }
+      
+      websocket.current.send(JSON.stringify({
+        type: 'get_status',
+        bot_id: numericBotId
+      }));
+    }
+  }, [state.bots]);
 
   const clearEventLog = useCallback(() => {
     setState(prevState => ({
@@ -545,68 +626,80 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     }));
   }, []);
 
-  const startTask = useCallback(() => {
+  const cancelJob = useCallback((botId: string | number) => {
     if (websocket.current?.readyState === WebSocket.OPEN) {
-      websocket.current.send(JSON.stringify({
-        type: 'start_task',
-        timestamp: Date.now()
+      // Convert to numeric bot ID
+      let resolvedBotId = typeof botId === 'number' ? botId : 0;
+      
+      if (typeof botId === 'string') {
+        const bot = state.bots.find(b => b.id === botId);
+        if (bot && typeof bot.index === 'number') {
+          resolvedBotId = bot.index;
+        } else {
+          const parsed = parseInt(botId);
+          resolvedBotId = isNaN(parsed) ? 0 : parsed;
+        }
+      }
+
+      if (!isValidBotId(resolvedBotId)) {
+        console.warn('⚠️ Invalid bot ID for cancel:', botId);
+        return;
+      }
+
+      const cancelMessage = {
+        type: 'cancel_job',
+        bot_id: resolvedBotId
+      };
+
+      websocket.current.send(JSON.stringify(cancelMessage));
+      console.log('Cancel job message sent:', cancelMessage);
+
+      // Add local event for immediate feedback
+      const newEvent: BotEvent = {
+        id: (++eventIdCounter.current).toString(),
+        timestamp: Date.now(),
+        botId: typeof botId === 'string' ? botId : botId.toString(),
+        type: 'CANCEL_REQUESTED',
+        message: `Cancel job requested for Bot ${botId}`,
+        details: { botId: resolvedBotId }
+      };
+
+      setState(prevState => ({
+        ...prevState,
+        events: [...prevState.events.slice(-99), newEvent]
       }));
     }
+  }, [state.bots]);
 
-    setState(prevState => ({
-      ...prevState,
-      taskStats: {
-        ...prevState.taskStats,
-        startTime: Date.now(),
-        endTime: null,
-        isRunning: true
-      }
+  // Initialize bots manually (since connection_established is non-contract)
+  const initializeBots = useCallback((botCount: number = 4) => {
+    const newBots: BotStatus[] = Array.from({ length: Math.min(botCount, 65) }, (_, i) => ({
+      id: `worker_${i}`, // String ID for display
+      index: i, // Numeric index for contract communication
+      position: [0, 64, 0] as [number, number, number], // Contract-compliant [x, y, z] format
+      inventory: {},
+      currentJob: 'Idle - awaiting commands',
+      status: 'IDLE' as const,
+      lastActivity: 'Connected',
+      utilization: 0,
+      lastLog: 'Bot connected and ready',
+      health: undefined,
+      food: undefined,
+      currentJobProgress: undefined
     }));
 
-    const startEvent: BotEvent = {
-      id: (++eventIdCounter.current).toString(),
-      timestamp: Date.now(),
-      botId: 'system', // System event
-      type: 'START',
-      message: 'Task started: Build Sugar Cane Farm'
-    };
-
-    setState(prevState => ({
-      ...prevState,
-      events: [...prevState.events, startEvent]
-    }));
-  }, []);
-
-  const stopTask = useCallback(() => {
-    if (websocket.current?.readyState === WebSocket.OPEN) {
-      websocket.current.send(JSON.stringify({
-        type: 'stop_task',
-        timestamp: Date.now()
-      }));
-    }
-
-    setState(prevState => ({
-      ...prevState,
-      taskStats: {
-        ...prevState.taskStats,
-        endTime: Date.now(),
-        isRunning: false
-      }
+    setState(prev => ({
+      ...prev,
+      bots: newBots,
+      taskStats: { ...prev.taskStats, workerCount: newBots.length }
     }));
 
-    const stopEvent: BotEvent = {
-      id: (++eventIdCounter.current).toString(),
-      timestamp: Date.now(),
-      botId: 'system', // System event
-      type: 'COMPLETE',
-      message: 'Task stopped by manager'
-    };
+    // Start polling for bot status updates
+    const botIds = newBots.map(bot => bot.index);
+    startStatusPolling(botIds);
 
-    setState(prevState => ({
-      ...prevState,
-      events: [...prevState.events, stopEvent]
-    }));
-  }, []);
+    console.log('🤖 Initialized bots:', newBots.map(b => `${b.id} (ID: ${b.index})`));
+  }, [startStatusPolling]);
 
   const resetTask = useCallback(() => {
     setState(prevState => ({
@@ -627,9 +720,12 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
         status: 'IDLE',
         currentJob: 'Idle - awaiting commands',
         lastActivity: 'Reset to spawn',
-        position: { x: 0, y: 64, z: 0 },
+        position: [0, 64, 0] as [number, number, number],
         inventory: {},
-        utilization: 0
+        utilization: 0,
+        health: undefined,
+        food: undefined,
+        currentJobProgress: undefined
       }))
     }));
   }, []);
@@ -638,14 +734,14 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     const testEvent: BotEvent = {
       id: (++eventIdCounter.current).toString(),
       timestamp: Date.now(),
-      botId: 'system', // System event
+      botId: 'system',
       type: 'START',
       message: 'Running functional test: Accelerating game time and checking sugar cane output...'
     };
 
     setState(prevState => ({
       ...prevState,
-      events: [...prevState.events, testEvent]
+      events: [...prevState.events.slice(-99), testEvent]
     }));
 
     // Simulate functional test result after 3 seconds
@@ -664,7 +760,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
 
       setState(prevState => ({
         ...prevState,
-        events: [...prevState.events, resultEvent],
+        events: [...prevState.events.slice(-99), resultEvent],
         taskStats: {
           ...prevState.taskStats,
           functionalComplete: isSuccess
@@ -684,7 +780,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
 
     setState(prevState => ({
       ...prevState,
-      events: [...prevState.events, regionEvent]
+      events: [...prevState.events.slice(-99), regionEvent]
     }));
   }, []);
 
@@ -694,11 +790,11 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       sendCommand,
       queryBot,
       clearEventLog,
-      startTask,
-      stopTask,
+      cancelJob,
       resetTask,
       runFunctionalTest,
-      selectBlueprintRegion
+      selectBlueprintRegion,
+      initializeBots // New action to manually initialize bots
     }
   };
 };

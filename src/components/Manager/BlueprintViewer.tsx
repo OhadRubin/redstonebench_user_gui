@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 interface BlueprintViewerProps {
-  completedBlocks: Set<string>; // Set of "x,y,z" coordinates that are completed
+  completedBlocks: Set<[number, number, number]>; // Set of [x,y,z] coordinate arrays that are completed
   onRegionSelect: (region: string) => void;
   isOpen: boolean;
   onClose: () => void;
@@ -72,7 +72,13 @@ const BlueprintViewer: React.FC<BlueprintViewerProps> = ({ completedBlocks, onRe
   };
 
   const isBlockCompleted = (x: number, y: number, z: number): boolean => {
-    return completedBlocks.has(`${x},${y},${z}`);
+    // Check if the coordinate array [x,y,z] exists in completedBlocks
+    for (const coord of Array.from(completedBlocks)) {
+      if (coord[0] === x && coord[1] === y && coord[2] === z) {
+        return true;
+      }
+    }
+    return false;
   };
 
   const getBlockStyle = (block: string, x: number, z: number, y: number): React.CSSProperties => {
@@ -163,7 +169,7 @@ const BlueprintViewer: React.FC<BlueprintViewerProps> = ({ completedBlocks, onRe
 
   // Calculate completion stats
   const totalBlocks = Object.values(blueprint.layers).flat().join('').replace(/O/g, '').length;
-  const completedCount = Array.from(completedBlocks).length;
+  const completedCount = completedBlocks.size;
   const completionPercentage = totalBlocks > 0 ? (completedCount / totalBlocks * 100) : 0;
 
   const handleBlockClick = (x: number, y: number, z: number, block: string) => {

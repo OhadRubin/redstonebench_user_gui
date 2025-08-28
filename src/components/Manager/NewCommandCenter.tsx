@@ -1,10 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { BotStatus } from './WorkerDashboard';
 
+/**
+ * NewCommandCenter - Contract-Compliant Command Interface
+ * 
+ * This component has been updated to comply with the RedstoneBench WebSocket Contract:
+ * 1. Command messages now include required "type": "command" field
+ * 2. Uses "cmd" instead of "command" field name
+ * 3. Parameters are wrapped in "parameters" object
+ * 4. move_to command uses "target": [x,y,z] format
+ * 5. get_status and cancel_job use separate message types (not command messages)
+ * 6. Bot ID validation for range 0-64 using selectedBot.index (numeric)
+ * 7. Status checks use 'BUSY' instead of 'IN_PROGRESS'
+ * 8. Extension commands are clearly marked and visually distinguished
+ * 
+ * Error Handling (to be implemented in parent component):
+ * The parent component should handle WebSocket responses and display errors for:
+ * - BOT_BUSY: "Bot is currently busy with another job"
+ * - INVALID_PARAMETERS: "Invalid or missing parameters"
+ * - BOT_NOT_FOUND: "Bot ID not found or not connected"
+ * - INTERNAL_ERROR: "Server error occurred"
+ */
+
+// Contract-compliant message structures
+interface CommandMessage {
+  type: 'command';
+  cmd: string;
+  bot_id: number;
+  parameters: Record<string, any>;
+}
+
+interface CancelJobMessage {
+  type: 'cancel_job';
+  bot_id: number;
+}
+
+interface GetStatusMessage {
+  type: 'get_status';
+  bot_id: number;
+}
+
+type WebSocketMessage = CommandMessage | CancelJobMessage | GetStatusMessage;
+
+interface CommandDefinition {
+  id: string;
+  icon: string;
+  label: string;
+  color: string;
+  extension?: boolean;
+}
+
 interface NewCommandCenterProps {
   selectedBot: BotStatus | null;
   availableBots: string[];
   onCommandSent: (command: any) => void;
+  onCancelJob: (botId: string | number) => void;
   selectedCommand: string;
   onCommandChange: (command: string) => void;
   moveTarget: { x: number; y: number; z: number } | null;
@@ -65,7 +115,7 @@ const SelectedBotLogDisplay: React.FC<SelectedBotLogDisplayProps> = ({ selectedB
   );
 };
 
-const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availableBots, onCommandSent, selectedCommand, onCommandChange, moveTarget, onMoveTargetChange }) => {
+const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availableBots, onCommandSent, onCancelJob, selectedCommand, onCommandChange, moveTarget, onMoveTargetChange }) => {
 
   // Form states for different commands
   const [gatherForm, setGatherForm] = useState({
@@ -114,50 +164,103 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
     onMoveTargetChange(newMoveForm);
   };
 
-  const commands = [
-    { id: 'gather', icon: '⛏️', label: 'Gather', color: '#ff9500' },
-    { id: 'craft', icon: '🔨', label: 'Craft', color: '#8B4513' },
+  const commands: CommandDefinition[] = [
+    // Contract-compliant commands
     { id: 'move_to', icon: '🚶', label: 'Move', color: '#00aaff' },
-    { id: 'place_blueprint', icon: '🏗️', label: 'Build', color: '#00ff44' },
-    { id: 'use_chest', icon: '📦', label: 'Chest', color: '#ff6b6b' },
-    { id: 'query_status', icon: '❓', label: 'Query', color: '#888' },
-    { id: 'wait', icon: '⏱️', label: 'Wait', color: '#ffaa44' }
+    { id: 'cancel_job', icon: '🛑', label: 'Cancel', color: '#ff4444' },
+    { id: 'get_status', icon: '❓', label: 'Query', color: '#888' },
+    // Extension commands (not in contract)
+    { id: 'gather', icon: '⛏️', label: 'Gather (Ext)', color: '#ff9500', extension: true },
+    { id: 'craft', icon: '🔨', label: 'Craft (Ext)', color: '#8B4513', extension: true },
+    { id: 'place_blueprint', icon: '🏗️', label: 'Build (Ext)', color: '#00ff44', extension: true },
+    { id: 'use_chest', icon: '📦', label: 'Chest (Ext)', color: '#ff6b6b', extension: true },
+    { id: 'wait', icon: '⏱️', label: 'Wait (Ext)', color: '#ffaa44', extension: true }
   ];
 
   const handleSendCommand = () => {
     if (!selectedBot) return;
 
-    let command: any = {
-      bot_id: selectedBot.id,
-      command: selectedCommand,
-      timestamp: Date.now()
-    };
-
-    switch (selectedCommand) {
-      case 'gather':
-        command = { ...command, ...gatherForm };
-        break;
-      case 'craft':
-        command = { ...command, ...craftForm };
-        break;
-      case 'move_to':
-        command = { ...command, ...moveForm };
-        break;
-      case 'place_blueprint':
-        command = { ...command, ...blueprintForm };
-        break;
-      case 'use_chest':
-        command = { ...command, ...chestForm };
-        break;
-      case 'query_status':
-        // No additional parameters needed
-        break;
-      case 'wait':
-        command = { ...command, duration: waitTime };
-        break;
+    // Validate bot_id is in range 0-64 as per contract
+    if (selectedBot.index < 0 || selectedBot.index > 64) {
+      console.error('Bot ID must be in range 0-64');
+      return;
     }
 
-    onCommandSent(command);
+    let message: WebSocketMessage;
+
+    switch (selectedCommand) {
+      case 'move_to':
+        // Contract-compliant format: "target": [x, y, z]
+        message = {
+          type: 'command',
+          cmd: selectedCommand,
+          bot_id: selectedBot.index,
+          parameters: {
+            target: [moveForm.x, moveForm.y, moveForm.z]
+          }
+        };
+        break;
+      case 'get_status':
+        // Contract-compliant: separate message type for get_status
+        message = {
+          type: 'get_status',
+          bot_id: selectedBot.index
+        };
+        break;
+      case 'cancel_job':
+        // Contract-compliant: separate message type for cancel_job
+        message = {
+          type: 'cancel_job',
+          bot_id: selectedBot.index
+        };
+        break;
+      // Extension commands (not in contract)
+      case 'gather':
+        message = {
+          type: 'command',
+          cmd: selectedCommand,
+          bot_id: selectedBot.index,
+          parameters: { ...gatherForm }
+        };
+        break;
+      case 'craft':
+        message = {
+          type: 'command',
+          cmd: selectedCommand,
+          bot_id: selectedBot.index,
+          parameters: { ...craftForm }
+        };
+        break;
+      case 'place_blueprint':
+        message = {
+          type: 'command',
+          cmd: selectedCommand,
+          bot_id: selectedBot.index,
+          parameters: { ...blueprintForm }
+        };
+        break;
+      case 'use_chest':
+        message = {
+          type: 'command',
+          cmd: selectedCommand,
+          bot_id: selectedBot.index,
+          parameters: { ...chestForm }
+        };
+        break;
+      case 'wait':
+        message = {
+          type: 'command',
+          cmd: selectedCommand,
+          bot_id: selectedBot.index,
+          parameters: { duration: waitTime }
+        };
+        break;
+      default:
+        console.error(`Unsupported command: ${selectedCommand}`);
+        return;
+    }
+
+    onCommandSent(message);
   };
 
   // Unit Information Section
@@ -182,10 +285,7 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
     const getStatusColor = (status: BotStatus['status']) => {
       switch (status) {
         case 'IDLE': return '#888';
-        case 'IN_PROGRESS': return '#00aaff';
-        case 'COMPLETE': return '#00ff44';
-        case 'FAILED': return '#ff4444';
-        case 'BLOCKED': return '#ffaa44';
+        case 'BUSY': return '#00aaff';
         default: return '#888';
       }
     };
@@ -257,7 +357,7 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
           <div>
             <div style={{ color: '#888', marginBottom: '2px' }}>Position</div>
             <div style={{ color: '#fff' }}>
-              {selectedBot.position.x}, {selectedBot.position.y}, {selectedBot.position.z}
+              {selectedBot.position[0]}, {selectedBot.position[1]}, {selectedBot.position[2]}
             </div>
           </div>
           <div>
@@ -300,6 +400,42 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
             {formatInventory(selectedBot.inventory)}
           </div>
         </div>
+
+        {/* Cancel Job Button - Only show when bot is busy */}
+        {selectedBot.status === 'BUSY' && (
+          <div style={{ marginTop: '8px' }}>
+            <button
+              onClick={() => {
+                // Send proper contract-compliant cancel_job message
+                const cancelMessage: CancelJobMessage = {
+                  type: 'cancel_job',
+                  bot_id: selectedBot.index
+                };
+                onCommandSent(cancelMessage);
+              }}
+              style={{
+                width: '100%',
+                background: 'linear-gradient(135deg, #ff4444, #cc3333)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '6px 8px',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #ff6666, #dd4444)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #ff4444, #cc3333)';
+              }}
+            >
+              🛑 Cancel Job
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -336,10 +472,14 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
               style={{
                 background: selectedCommand === cmd.id 
                   ? `linear-gradient(135deg, ${cmd.color}, ${cmd.color}dd)`
-                  : 'linear-gradient(to bottom, #333 0%, #222 100%)',
+                  : cmd.extension
+                    ? 'linear-gradient(to bottom, #2a2a2a 0%, #1a1a1a 100%)'
+                    : 'linear-gradient(to bottom, #333 0%, #222 100%)',
                 border: selectedCommand === cmd.id 
                   ? `2px solid ${cmd.color}` 
-                  : '1px solid #555',
+                  : cmd.extension
+                    ? '1px solid #444'
+                    : '1px solid #555',
                 borderRadius: '6px',
                 padding: '6px 4px',
                 cursor: selectedBot ? 'pointer' : 'not-allowed',
@@ -348,7 +488,7 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
                 alignItems: 'center',
                 gap: '2px',
                 transition: 'all 0.2s ease',
-                opacity: selectedBot ? 1 : 0.5,
+                opacity: selectedBot ? (cmd.extension ? 0.7 : 1) : 0.5,
                 height: '50px',
                 minHeight: '50px'
               }}
@@ -588,10 +728,32 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
         );
         break;
 
-      case 'query_status':
+      case 'get_status':
         optionsContent = (
           <div style={{ color: '#888', fontSize: '10px', textAlign: 'center', padding: '20px 0' }}>
             No additional options required for status query
+          </div>
+        );
+        break;
+
+      case 'cancel_job':
+        optionsContent = (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ color: '#ff4444', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px' }}>
+              🛑 Cancel Current Job
+            </div>
+            <div style={{ color: '#888', fontSize: '10px', lineHeight: '1.4' }}>
+              This will cancel the currently running job for the selected bot.
+              {selectedBot?.status === 'BUSY' ? (
+                <div style={{ color: '#ffaa44', marginTop: '4px' }}>
+                  Bot is currently busy: {selectedBot.currentJob}
+                </div>
+              ) : (
+                <div style={{ color: '#666', marginTop: '4px' }}>
+                  Bot is idle - no job to cancel
+                </div>
+              )}
+            </div>
           </div>
         );
         break;
@@ -622,25 +784,27 @@ const NewCommandCenter: React.FC<NewCommandCenterProps> = ({ selectedBot, availa
 
         <button 
           onClick={handleSendCommand}
-          disabled={!selectedBot}
+          disabled={!selectedBot || (selectedCommand === 'cancel_job' && selectedBot?.status !== 'BUSY')}
           style={{
-            background: selectedBot ? 'linear-gradient(135deg, #007acc, #0066aa)' : '#444',
+            background: (selectedBot && !(selectedCommand === 'cancel_job' && selectedBot?.status !== 'BUSY')) 
+              ? 'linear-gradient(135deg, #007acc, #0066aa)' : '#444',
             color: '#fff',
             border: 'none',
             padding: '8px 16px',
             borderRadius: '6px',
-            cursor: selectedBot ? 'pointer' : 'not-allowed',
+            cursor: (selectedBot && !(selectedCommand === 'cancel_job' && selectedBot?.status !== 'BUSY')) 
+              ? 'pointer' : 'not-allowed',
             fontSize: '11px',
             fontWeight: 'bold',
-            opacity: selectedBot ? 1 : 0.5
+            opacity: (selectedBot && !(selectedCommand === 'cancel_job' && selectedBot?.status !== 'BUSY')) ? 1 : 0.5
           }}
           onMouseEnter={(e) => {
-            if (selectedBot) {
+            if (selectedBot && !(selectedCommand === 'cancel_job' && selectedBot?.status !== 'BUSY')) {
               e.currentTarget.style.background = 'linear-gradient(135deg, #0099ff, #0077cc)';
             }
           }}
           onMouseLeave={(e) => {
-            if (selectedBot) {
+            if (selectedBot && !(selectedCommand === 'cancel_job' && selectedBot?.status !== 'BUSY')) {
               e.currentTarget.style.background = 'linear-gradient(135deg, #007acc, #0066aa)';
             }
           }}

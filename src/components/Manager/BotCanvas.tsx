@@ -230,8 +230,8 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
 
     // Draw bots as units in the world
     bots.forEach((bot) => {
-      const worldX = bot.position.x * 5; // Scale up for better visibility
-      const worldZ = bot.position.y * 5; // Using y coordinate (which contains the original z) for 2D view
+      const worldX = bot.position[0] * 5; // Scale up for better visibility (x coordinate)
+      const worldZ = bot.position[2] * 5; // Using z coordinate for 2D view ([x, y, z] array format)
 
       // Bot body
       const isSelected = selectedBot?.id === bot.id;
@@ -239,9 +239,7 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
       
       // Bot color based on team/status
       let botColor = '#3B82F6'; // Blue for player bots
-      if (bot.status === 'FAILED') botColor = '#EF4444';
-      else if (bot.status === 'BLOCKED') botColor = '#F59E0B';
-      else if (bot.status === 'COMPLETE') botColor = '#10B981';
+      if (bot.status === 'BUSY') botColor = '#00AAFF'; // Contract-compliant: BUSY status
 
       // Draw bot shadow
       ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -275,7 +273,7 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
       ctx.fillText(`Bot ${bot.id}`, worldX, worldZ + size + fontSize);
 
       // Draw activity indicator
-      if (bot.currentJob && bot.status === 'IN_PROGRESS') {
+      if (bot.currentJob && bot.status === 'BUSY') {
         ctx.fillStyle = '#00ff00';
         ctx.beginPath();
         ctx.arc(worldX + size/2, worldZ - size/2, 3, 0, 2 * Math.PI);
@@ -341,8 +339,8 @@ const BotCanvas: React.FC<BotCanvasProps> = ({ bots, selectedBot, onBotSelect, v
       // Check if clicking on a bot
       let clickedBot = null;
       for (const bot of bots) {
-        const worldX = bot.position.x * 5;
-        const worldZ = bot.position.y * 5; // Using y coordinate (which contains the original z) for 2D view
+        const worldX = bot.position[0] * 5;
+        const worldZ = bot.position[2] * 5; // Using z coordinate for 2D view ([x, y, z] array format)
         const distance = Math.sqrt(
           Math.pow(worldPos.x - worldX, 2) + Math.pow(worldPos.y - worldZ, 2)
         );
