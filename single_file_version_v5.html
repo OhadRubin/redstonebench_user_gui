@@ -389,17 +389,17 @@ html, body {
 /* ─── Bottom Panel ─────────────────────────── */
 #bottom-panel {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   height: auto;
-  min-height: 320px;
+  min-height: 180px;
 }
 
 .panel {
   background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(20, 27, 40, 0.95));
   backdrop-filter: blur(20px);
   border: 1px solid rgba(88, 166, 255, 0.2);
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 12px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 10px 40px rgba(0,0,0,0.3);
@@ -425,27 +425,17 @@ html, body {
   box-shadow: 0 15px 50px rgba(0,0,0,0.4);
 }
 
-.panel:first-child { 
-  flex: 0 0 280px; 
-}
-
-.panel:nth-child(2) { 
-  flex: 1; 
-}
-
-.panel:last-child { 
-  flex: 0 0 380px; 
-}
+/* Panel sizing now handled dynamically via React state */
 
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid rgba(88, 166, 255, 0.1);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 12px;
   color: #58a6ff;
 }
 
@@ -572,9 +562,9 @@ html, body {
 /* ─── Command Center ──────────────────────── */
 .bot-info {
   background: linear-gradient(135deg, rgba(88, 166, 255, 0.05), rgba(88, 166, 255, 0.02));
-  border-radius: 10px;
-  padding: 16px;
-  margin-bottom: 16px;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
   border: 1px solid rgba(88, 166, 255, 0.1);
   position: relative;
   overflow: hidden;
@@ -618,28 +608,28 @@ html, body {
 
 .command-tabs {
   display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  padding: 4px;
+  gap: 2px;
+  margin-bottom: 8px;
+  padding: 2px;
   background: rgba(0, 0, 0, 0.2);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .tab-btn {
   flex: 1;
-  padding: 10px;
+  padding: 6px;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #7d8590;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .tab-btn:hover {
@@ -656,24 +646,24 @@ html, body {
 .command-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 
 .cmd-btn {
-  padding: 12px;
+  padding: 8px;
   background: linear-gradient(135deg, rgba(88, 166, 255, 0.05), rgba(88, 166, 255, 0.02));
   border: 1px solid rgba(88, 166, 255, 0.2);
-  border-radius: 10px;
+  border-radius: 6px;
   color: #e6edf3;
   cursor: pointer;
   transition: all 0.3s ease;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   position: relative;
   overflow: hidden;
 }
@@ -709,14 +699,14 @@ html, body {
 }
 
 .cmd-icon {
-  font-size: 20px;
+  font-size: 16px;
 }
 
 .coord-inputs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 
 .coord-input-wrapper {
@@ -736,12 +726,12 @@ html, body {
 
 input[type="number"] {
   width: 100%;
-  padding: 10px 12px;
+  padding: 6px 8px;
   background: rgba(13, 17, 23, 0.5);
   border: 1px solid rgba(88, 166, 255, 0.2);
-  border-radius: 8px;
+  border-radius: 4px;
   color: #e6edf3;
-  font-size: 14px;
+  font-size: 12px;
   font-family: monospace;
   transition: all 0.2s ease;
 }
@@ -759,15 +749,15 @@ input[type="number"]::placeholder {
 
 #exec-btn {
   width: 100%;
-  padding: 14px;
+  padding: 8px;
   background: linear-gradient(135deg, #238636, #2ea043);
   border: none;
-  border-radius: 10px;
+  border-radius: 6px;
   color: #fff;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  font-size: 14px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 1px;
   position: relative;
@@ -987,12 +977,35 @@ input[type="number"]::placeholder {
   background: linear-gradient(135deg, rgba(88, 166, 255, 0.5), rgba(88, 166, 255, 0.7));
 }
 
-/* ─── Responsive ──────────────────────────── */
-@media (max-width: 1200px) {
-  .panel:first-child { flex: 0 0 240px; }
-  .panel:last-child { flex: 0 0 320px; }
+/* ─── Resize Handle ───────────────────────── */
+.resize-handle {
+  width: 4px;
+  background: rgba(88, 166, 255, 0.2);
+  cursor: col-resize;
+  position: relative;
+  transition: background 0.2s ease;
+  border-radius: 2px;
 }
 
+.resize-handle:hover {
+  background: rgba(88, 166, 255, 0.5);
+}
+
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  background: transparent;
+}
+
+.resize-handle.dragging {
+  background: #58a6ff;
+}
+
+/* ─── Responsive ──────────────────────────── */
 @media (max-width: 992px) {
   #bottom-panel {
     flex-direction: column;
@@ -1001,6 +1014,9 @@ input[type="number"]::placeholder {
   .panel {
     width: 100%;
     flex: none !important;
+  }
+  .resize-handle {
+    display: none;
   }
 }
 
@@ -2085,6 +2101,47 @@ function LogPanel({logs}) {
   );
 }
 
+/* ──────────────────────── RESIZE HANDLE ──────────────────────── */
+function ResizeHandle({onResize}) {
+  const [isDragging, setIsDragging] = useState(false);
+  const startXRef = useRef(0);
+
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    startXRef.current = e.clientX;
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e) => {
+      const deltaX = e.clientX - startXRef.current;
+      onResize(deltaX);
+      startXRef.current = e.clientX;
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, onResize]);
+
+  return (
+    <div 
+      className={`resize-handle ${isDragging ? 'dragging' : ''}`}
+      onMouseDown={handleMouseDown}
+    />
+  );
+}
+
 /* ──────────────────────── NOTIFICATION SYSTEM ────────────────── */
 function Notification({notification, onClose}) {
   useEffect(() => {
@@ -2124,6 +2181,11 @@ function App() {
   const [moveTarget, setMoveTarget] = useState(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [panelFlexes, setPanelFlexes] = useState({
+    first: 0.3,
+    second: 0.4,
+    third: 1
+  });
   const startTimeRef = useRef(Date.now());
   
   // WebSocket connection
@@ -2242,6 +2304,25 @@ function App() {
     }
   }, [send]);
 
+  // Resize handlers
+  const handleResize1 = (deltaX) => {
+    const sensitivity = 0.001;
+    setPanelFlexes(prev => ({
+      ...prev,
+      first: Math.max(0.1, Math.min(0.8, prev.first + deltaX * sensitivity)),
+      second: Math.max(0.1, prev.second - deltaX * sensitivity)
+    }));
+  };
+
+  const handleResize2 = (deltaX) => {
+    const sensitivity = 0.001;
+    setPanelFlexes(prev => ({
+      ...prev,
+      second: Math.max(0.1, Math.min(0.8, prev.second + deltaX * sensitivity)),
+      third: Math.max(0.2, prev.third - deltaX * sensitivity)
+    }));
+  };
+
   const botArray = Object.values(bots);
   const selectedBots = botArray.filter(b => selectedIds.includes(b.id));
 
@@ -2268,7 +2349,7 @@ function App() {
         </div>
 
         <div id="bottom-panel">
-          <div className="panel">
+          <div className="panel" style={{flex: `${panelFlexes.first}`}}>
             <div className="panel-header">
               <div className="panel-header-icon">🤖</div>
               <span>Unit Selection</span>
@@ -2281,7 +2362,9 @@ function App() {
             />
           </div>
 
-          <div className="panel">
+          <ResizeHandle onResize={handleResize1} />
+
+          <div className="panel" style={{flex: `${panelFlexes.second}`}}>
             <div className="panel-header">
               <div className="panel-header-icon">🎮</div>
               <span>Command Center</span>
@@ -2297,7 +2380,9 @@ function App() {
             />
           </div>
 
-          <div className="panel">
+          <ResizeHandle onResize={handleResize2} />
+
+          <div className="panel" style={{flex: `${panelFlexes.third}`}}>
             <div className="panel-header">
               <div className="panel-header-icon">📜</div>
               <span>System Log</span>
