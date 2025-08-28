@@ -35,7 +35,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = () => {
     const recentEvents = events.slice(-10); // Process last 10 events
     
     recentEvents.forEach(event => {
-      if (event.type === 'PROGRESS' && event.details) {
+      if (event.type === 'job_progress' && event.details) {
         const { bot_id, result } = event.details;
         if (result && typeof result.progress_percent === 'number') {
           const botProgress: BotJobProgress = {
@@ -48,7 +48,7 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = () => {
           
           setBotJobProgress(prev => new Map(prev.set(bot_id, botProgress)));
         }
-      } else if (event.type === 'COMPLETE' || event.type === 'FAILED') {
+      } else if (event.type === 'job_complete' || event.type === 'job_failed') {
         // Clear progress when job completes/fails
         const botId = event.botId;
         setBotJobProgress(prev => {
@@ -56,11 +56,11 @@ const TaskProgressPanel: React.FC<TaskProgressPanelProps> = () => {
           newMap.delete(botId);
           return newMap;
         });
-      } else if (event.type === 'REJECTED' && event.errorCode) {
+      } else if (event.type === 'command_response' && event.status === 'rejected') {
         // Handle contract error codes
         setLastError({
-          code: event.errorCode as ContractErrorCode,
-          message: event.message
+          code: event.error.code as ContractErrorCode,
+          message: event.error.message
         });
         setTimeout(() => setLastError(null), 5000); // Clear error after 5 seconds
       }

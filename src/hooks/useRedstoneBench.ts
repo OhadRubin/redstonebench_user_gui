@@ -315,7 +315,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
               jobId: `job_${data.bot_id}_${Date.now()}`,
               message: data.message || generateEventMessage(data),
               details: data.result || data.error_details || data,
-              errorCode: data.type === 'job_failed' ? 'JOB_FAILED' : undefined
+              errorCode: undefined
             };
 
             setState(prev => ({
@@ -544,34 +544,6 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
         events: [...prevState.events.slice(-99), newEvent]
       }));
 
-      // If not connected, simulate response (for test mode)
-      if (!websocket.current || websocket.current.readyState !== WebSocket.OPEN) {
-        setTimeout(() => {
-          const responseEvent: BotEvent = {
-            id: (++eventIdCounter.current).toString(),
-            timestamp: Date.now(),
-            botId: command.bot_id,
-            type: 'START',
-            jobId: `job_${Date.now()}`,
-            message: `Bot ${command.bot_id} started executing ${command.command} (test mode)`
-          };
-
-          setState(prevState => ({
-            ...prevState,
-            events: [...prevState.events.slice(-99), responseEvent],
-            bots: prevState.bots.map(bot => 
-              bot.id === command.bot_id 
-                ? { 
-                    ...bot, 
-                    status: 'BUSY' as const, 
-                    currentJob: `Executing ${command.command}`,
-                    lastActivity: `Started ${command.command}`
-                  }
-                : bot
-            )
-          }));
-        }, 1000 + Math.random() * 2000);
-      }
 
       console.log('Command sent:', command);
     } catch (error) {
@@ -583,7 +555,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
         type: 'ERROR',
         message: `Failed to send command: ${error instanceof Error ? error.message : 'Unknown error'}`,
         details: { command, error: error instanceof Error ? error.message : error },
-        errorCode: 'COMMAND_VALIDATION_ERROR'
+        errorCode: 'INVALID_PARAMETERS'
       };
 
       setState(prevState => ({
@@ -730,59 +702,6 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
     }));
   }, []);
 
-  const runFunctionalTest = useCallback(() => {
-    const testEvent: BotEvent = {
-      id: (++eventIdCounter.current).toString(),
-      timestamp: Date.now(),
-      botId: 'system',
-      type: 'START',
-      message: 'Running functional test: Accelerating game time and checking sugar cane output...'
-    };
-
-    setState(prevState => ({
-      ...prevState,
-      events: [...prevState.events.slice(-99), testEvent]
-    }));
-
-    // Simulate functional test result after 3 seconds
-    setTimeout(() => {
-      const isSuccess = Math.random() > 0.3; // 70% success rate for demo
-      const resultEvent: BotEvent = {
-        id: (++eventIdCounter.current).toString(),
-        timestamp: Date.now(),
-        botId: 'system',
-        type: isSuccess ? 'COMPLETE' : 'FAILED',
-        message: isSuccess 
-          ? 'Functional test PASSED: Sugar cane farm produced 24 items in output chest'
-          : 'Functional test FAILED: No sugar cane detected in output chest',
-        errorCode: isSuccess ? undefined : 'FUNCTIONAL_TEST_FAILED'
-      };
-
-      setState(prevState => ({
-        ...prevState,
-        events: [...prevState.events.slice(-99), resultEvent],
-        taskStats: {
-          ...prevState.taskStats,
-          functionalComplete: isSuccess
-        }
-      }));
-    }, 3000);
-  }, []);
-
-  const selectBlueprintRegion = useCallback((region: string) => {
-    const regionEvent: BotEvent = {
-      id: (++eventIdCounter.current).toString(),
-      timestamp: Date.now(),
-      botId: 'system',
-      type: 'COMMAND_SENT',
-      message: `Selected blueprint region: ${region} for construction planning`
-    };
-
-    setState(prevState => ({
-      ...prevState,
-      events: [...prevState.events.slice(-99), regionEvent]
-    }));
-  }, []);
 
   return {
     ...state,
@@ -792,9 +711,7 @@ export const useRedstoneBench = (websocketUrl: string = 'ws://localhost:8080') =
       clearEventLog,
       cancelJob,
       resetTask,
-      runFunctionalTest,
-      selectBlueprintRegion,
-      initializeBots // New action to manually initialize bots
+      initializeBots
     }
   };
 };
