@@ -791,7 +791,7 @@ function CommandCenter({bot, onSend, selectedCommand, onCommandChange, moveTarge
         parameters: {target: [moveTarget.x, moveTarget.y, moveTarget.z]}
       });
     } else if (selectedCommand === "cancel_job") {
-      onSend({type: "command", cmd: "cancel", bot_id: bot.index});
+      onSend({type: "cancel_job", bot_id: bot.index});
     } else {
       onSend({type: "command", cmd: "status", bot_id: bot.index});
     }
